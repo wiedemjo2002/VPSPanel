@@ -29,6 +29,7 @@ const messages = {
     genericError: "Die Aktion ist fehlgeschlagen.", statusOnline: "Online", statusDeploying: "Wird deployed",
     statusQueued: "Wartet", statusFailed: "Fehlgeschlagen", deployment: "Deployment",
     viewLogs: "Logs ansehen", previousVersion: "Vorherige Version", privateSuffix: " · privat",
+    redeploy: "Neu deployen",
     automatic: "Automatisch", detectedTitle: "Wir haben Folgendes erkannt", type: "Typ", port: "Port",
     build: "Build", start: "Start", packageManager: "Paketmanager", migration: "Migration",
     visibility: "Sichtbarkeit", privateLabel: "Privat", publicLabel: "Öffentlich", requiredValue: "Erforderlicher Wert",
@@ -65,6 +66,7 @@ const messages = {
     genericError: "The action failed.", statusOnline: "Online", statusDeploying: "Deploying",
     statusQueued: "Queued", statusFailed: "Failed", deployment: "Deployment",
     viewLogs: "View logs", previousVersion: "Previous version", privateSuffix: " · private",
+    redeploy: "Deploy again",
     automatic: "Automatic", detectedTitle: "Here is what we detected", type: "Type", port: "Port",
     build: "Build", start: "Start", packageManager: "Package manager", migration: "Migration",
     visibility: "Visibility", privateLabel: "Private", publicLabel: "Public", requiredValue: "Required value",
@@ -178,9 +180,11 @@ function projectCard(project) {
   const actions = element("div", "card-actions");
   const logs = element("button", "secondary", t("viewLogs"));
   logs.addEventListener("click", () => showLogs(project.id));
+  const redeploy = element("button", "primary", t("redeploy"));
+  redeploy.addEventListener("click", () => redeployProject(project.id));
   const rollback = element("button", "secondary", t("previousVersion"));
   rollback.addEventListener("click", () => rollbackProject(project.id));
-  actions.append(logs, rollback);
+  actions.append(redeploy, logs, rollback);
   card.append(top, meta, actions);
   return card;
 }
@@ -351,7 +355,25 @@ async function showLogs(projectId) {
   catch (error) { $("#logOutput").textContent = error.message; }
 }
 
+async function redeployProject(projectId) {
+  clearError();
+  deployDialog.showModal();
+  $("#repositoryStep").classList.add("hidden");
+  $("#configureStep").classList.add("hidden");
+  $("#progressStep").classList.remove("hidden");
+  $("#dialogTitle").textContent = t("deploymentRunning");
+  $("#progressTitle").textContent = t("deploymentRunning");
+  $("#progressSubtitle").textContent = t("firstBuildHint");
+  $("#openAppButton").classList.add("hidden");
+  renderSteps([{ name: t("deploymentPreparing"), status: "running" }]);
+  try {
+    await api("/api/projects/" + projectId + "/deploy", { method: "POST", body: "{}" });
+    await pollDeployment(projectId);
+  } catch (error) { showError(error.message); }
+}
+
 async function rollbackProject(projectId) {
+
   if (!window.confirm(t("rollbackConfirm"))) return;
   try {
     await api("/api/projects/" + projectId + "/rollback", { method: "POST", body: "{}" });

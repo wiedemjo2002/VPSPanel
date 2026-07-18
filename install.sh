@@ -111,6 +111,7 @@ if [[ "$SOURCE_DIR" != "$INSTALL_DIR" ]]; then
 fi
 
 cd "$INSTALL_DIR"
+PANEL_VERSION="$(sed -n 's/^[[:space:]]*\"version\": \"\([^\"]*\)\",/\1/p' apps/panel/package.json | head -n1)"
 if [[ ! -f .env ]]; then
   DB_PASSWORD="$(openssl rand -hex 24)"
   SESSION_SECRET="$(openssl rand -hex 32)"
@@ -125,7 +126,7 @@ if [[ ! -f .env ]]; then
   fi
   umask 077
   cat > .env <<EOF
-VPSPANEL_VERSION=0.2.0
+VPSPANEL_VERSION=$PANEL_VERSION
 PANEL_LANGUAGE=$PANEL_LANG
 PANEL_SITE_ADDRESS=$SITE_ADDRESS
 PANEL_PUBLIC_URL=$PUBLIC_URL
@@ -147,7 +148,13 @@ elif grep -q '^PANEL_LANGUAGE=' .env; then
 else
   printf 'PANEL_LANGUAGE=%s\n' "$PANEL_LANG" >> .env
 fi
+if grep -q '^VPSPANEL_VERSION=' .env; then
+  sed -i "s/^VPSPANEL_VERSION=.*/VPSPANEL_VERSION=$PANEL_VERSION/" .env
+else
+  printf 'VPSPANEL_VERSION=%s\n' "$PANEL_VERSION" >> .env
+fi
 chmod 0600 .env
+
 
 install -m 0755 scripts/panelctl /usr/local/bin/panelctl
 log "$(say "VPSPanel wird gebaut und gestartet" "Building and starting VPSPanel")"

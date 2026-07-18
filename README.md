@@ -51,6 +51,7 @@ panelctl fragt Client-ID und Client-Secret interaktiv ab; das Secret erscheint n
 4. Deployment starten; Build, Container, Healthcheck, Caddy-Route und HTTPS laufen automatisch.
 5. Standardmäßig wird ein signierter GitHub-Webhook angelegt. Jeder Push auf den gewählten Branch deployt neu.
 6. Logs ansehen oder mit einem Klick auf die letzte funktionierende Version zurückrollen.
+7. Mit „Neu deployen“ jederzeit den aktuellen Branch erneut veröffentlichen.
 
 Für das automatische Anlegen des Webhooks benötigt der angemeldete GitHub-Benutzer Admin-Rechte am Repository. Schlägt nur die Webhook-Einrichtung fehl, läuft das erste Deployment trotzdem und das Panel zeigt einen verständlichen Hinweis.
 
@@ -72,6 +73,8 @@ sudo panelctl uninstall
 ~~~
 
 Mit VPSPANEL_HOME kann ein abweichendes Installationsverzeichnis verwendet werden.
+
+`panelctl backup` sichert neben Konfiguration und Panel-Datenbank automatisch alle laufenden Projekt-PostgreSQL-Datenbanken, die Caddy-Routen und SHA-256-Prüfsummen. Die Sicherungsdateien sind nur für `root` lesbar.
 
 ## Architektur
 
@@ -109,9 +112,12 @@ sudo bash scripts/test-github-flow.sh
 sudo bash scripts/test-agent-action.sh
 sudo bash scripts/test-agent-database.sh
 sudo bash scripts/test-webhook-flow.sh
+sudo bash scripts/test-nextjs-prisma-e2e.sh
 ~~~
 
 Der Linux-Smoke-Test scripts/test-clean-install.sh prüft zusätzlich den veröffentlichten Ein-Befehl-Installer in einer sauberen Umgebung.
+
+Der Next.js-E2E-Test verwendet die öffentlichen Branches `e2e-nextjs-prisma-v1` und `e2e-nextjs-prisma-v2` im Repository `wiedemjo2002/VPSPanel-TestApp`. Er prüft automatische Erkennung, zufällige Datenbankzugangsdaten, Prisma-Migration, HTTPS, Logs, erneutes Deployment, Isolation und Rollback.
 
 ## Bewusste MVP-Grenzen
 

@@ -11,6 +11,7 @@ set +a
 
 compose() { docker compose "$@"; }
 require_root() { [[ $EUID -eq 0 ]] || { echo "Run this command with sudo." >&2; exit 1; }; }
+project_version() { sed -n 's/^[[:space:]]*"version": "\([^"]*\)",/\1/p' apps/panel/package.json | head -n1; }
 
 usage() {
   cat <<'EOF'
@@ -56,16 +57,36 @@ case "${1:-}" in
       echo "This installation has no Git metadata; reinstall from the public repository to enable updates." >&2
       exit 1
     fi
+    version="$(project_version)"
+    if grep -q '^VPSPANEL_VERSION=' .env; then
+      sed -i "s/^VPSPANEL_VERSION=.*/VPSPANEL_VERSION=$version/" .env
+    else
+      printf 'VPSPANEL_VERSION=%s\n' "$version" >> .env
+    fi
+    chmod 0600 .env
     compose up -d --build --remove-orphans
     compose exec -T panel node healthcheck.js
     ;;
   backup)
     require_root
     stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+    umask 077
     directory="$VPSPANEL_HOME/backups/$stamp"
     install -d -m 0700 "$directory"
     cp .env "$directory/env"
     compose exec -T database pg_dump -U "${POSTGRES_USER:-vpspanel}" "${POSTGRES_DB:-vpspanel}" > "$directory/database.sql"
+    docker ps --format '{{.Names}} {{.Image}} {{.Status}}' > "$directory/running-containers.txt"
+    while IFS= read -r database_container; do
+      [[ -n "$database_container" ]] || continue
+      project_id="${database_container#vpspanel-db-}"
+      docker exec "$database_container" pg_dump -U app app > "$directory/project-$project_id.sql"
+      echo "Project database backed up: $project_id"
+    done < <(docker ps --format '{{.Names}}' | grep '^vpspanel-db-' || true)
+    docker cp vpspanel-agent-1:/caddy/caddy-projects.json "$directory/caddy-projects.json" >/dev/null 2>&1 || true
+    (
+      cd "$directory"
+      sha256sum env database.sql project-*.sql caddy-projects.json 2>/dev/null > SHA256SUMS || true
+    )
     echo "Backup created: $directory"
     ;;
   doctor)
@@ -142,7 +163,7 @@ case "${1:-}" in
     echo "The remaining files can be reviewed in: $VPSPANEL_HOME"
     ;;
   version)
-    grep '^VPSPANEL_VERSION=' .env | cut -d= -f2-
+    project_version
     ;;
   -h|--help|help|"") usage ;;
   *) echo "Unknown command: $1" >&2; usage >&2; exit 1 ;;

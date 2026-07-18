@@ -6,6 +6,7 @@ import { projectDockerfile } from "./templates.js";
 const dataRoot = process.env.PROJECTS_ROOT || "/data/projects";
 const edgeNetwork = process.env.EDGE_NETWORK || "vpspanel_edge";
 const caddyConfigPath = process.env.CADDY_CONFIG_PATH || "/caddy/Caddyfile";
+const caddyRegistryPath = process.env.CADDY_REGISTRY_PATH || join(dirname(caddyConfigPath), "caddy-projects.json");
 const caddyContainer = process.env.CADDY_CONTAINER || "vpspanel-caddy-1";
 
 const appName = (id) => `vpspanel-app-${id}`;
@@ -47,7 +48,9 @@ function renderCaddy(registry) {
 
 export async function initializeRuntime() {
   await mkdir(dirname(caddyConfigPath), { recursive: true });
-  await writeFile(caddyConfigPath, renderCaddy(await readRegistry()));
+  const registry = await readRegistry();
+  await writeFile(caddyRegistryPath, JSON.stringify(registry, null, 2), { mode: 0o600 });
+  await writeFile(caddyConfigPath, renderCaddy(registry));
   await command("docker", ["exec", caddyContainer, "caddy", "reload", "--config", "/runtime/Caddyfile", "--adapter", "caddyfile"]).catch(() => {});
 }
 export async function persist(job) {
@@ -104,7 +107,8 @@ async function ensureDatabase(input) {
   if (!(await containerExists(dbName(input.projectId)))) {
     await command("docker", ["volume", "create", `${dbName(input.projectId)}-data`]);
     await command("docker", [
-      "run", "-d", "--name", dbName(input.projectId), "--restart", "unless-stopped", "--network", network,
+      "run", "-d", "--name", dbName(input.projectId), "--restart", "unless-stopped", "--pids-limit", "256",
+      "--security-opt", "no-new-privileges:true", "--network", network,
       "-e", `POSTGRES_DB=${databaseUrl.pathname.slice(1)}`,
       "-e", `POSTGRES_USER=${decodeURIComponent(databaseUrl.username)}`,
       "-e", `POSTGRES_PASSWORD=${decodeURIComponent(databaseUrl.password)}`,
@@ -156,14 +160,19 @@ async function replaceApp(input, imageTag, envFile) {
 }
 
 async function readRegistry() {
-  try { return JSON.parse(await readFile(join(dataRoot, "caddy-projects.json"), "utf8")); }
-  catch { return {}; }
+  for (const path of [caddyRegistryPath, join(dataRoot, "caddy-projects.json")]) {
+    try {
+      const registry = JSON.parse(await readFile(path, "utf8"));
+      if (registry && typeof registry === "object" && !Array.isArray(registry)) return registry;
+    } catch {}
+  }
+  return {};
 }
 
 async function configureCaddy(input) {
   const registry = await readRegistry();
   registry[input.projectId] = { domain: input.domain, target: appName(input.projectId), port: input.port };
-  await writeFile(join(dataRoot, "caddy-projects.json"), JSON.stringify(registry, null, 2), { mode: 0o600 });
+  await writeFile(caddyRegistryPath, JSON.stringify(registry, null, 2), { mode: 0o600 });
   await writeFile(caddyConfigPath, renderCaddy(registry));
   await command("docker", ["exec", caddyContainer, "caddy", "reload", "--config", "/runtime/Caddyfile", "--adapter", "caddyfile"]);
 }

@@ -57,7 +57,10 @@ function checkWriteOrigin(request) {
   if (!["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) return true;
   if (request.headers["sec-fetch-site"] === "cross-site") return false;
   const origin = request.headers.origin;
-  return !origin || origin === new URL(publicUrl).origin;
+  if (!origin || origin === new URL(publicUrl).origin) return true;
+  const forwardedProtocol = String(request.headers["x-forwarded-proto"] || "http").split(",", 1)[0].trim();
+  const host = request.headers.host;
+  return ["http", "https"].includes(forwardedProtocol) && Boolean(host) && origin === `${forwardedProtocol}://${host}`;
 }
 
 async function agent(path, options = {}) {
@@ -79,7 +82,9 @@ async function asset(request, response) {
   if (!filePath.startsWith(publicDirectory)) return json(response, 403, { error: "Forbidden" });
   try {
     const data = await readFile(filePath);
-    response.writeHead(200, { ...securityHeaders, "Content-Type": types[extname(filePath)] || "application/octet-stream", "Cache-Control": requested === "/dashboard.html" ? "no-cache" : "public, max-age=3600" });
+    const extension = extname(filePath);
+    const cacheControl = [".html", ".js", ".css"].includes(extension) ? "no-cache" : "public, max-age=3600";
+    response.writeHead(200, { ...securityHeaders, "Content-Type": types[extension] || "application/octet-stream", "Cache-Control": cacheControl });
     response.end(data);
   } catch {
     const data = await readFile(join(publicDirectory, "dashboard.html"));
@@ -154,7 +159,7 @@ async function api(request, response, url) {
     await pool.query("SELECT 1");
     return json(response, 200, { status: "ok", service: "vpspanel", startedAt });
   }
-  if (url.pathname === "/api/meta") return json(response, 200, { publicUrl, githubConfigured: Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET), language: panelLanguage, version: "0.2.0" });
+  if (url.pathname === "/api/meta") return json(response, 200, { publicUrl, githubConfigured: Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET), language: panelLanguage, version: "0.3.0" });
   if (url.pathname === "/api/webhooks/github" && request.method === "POST") return githubWebhook(request, response);
   if (url.pathname === "/api/e2e/session" && request.method === "GET" && process.env.E2E_SESSION_TOKEN) {
     if (!safeEqual(url.searchParams.get("token"), process.env.E2E_SESSION_TOKEN)) return json(response, 404, { error: "Not found" });
@@ -272,7 +277,7 @@ async function api(request, response, url) {
     return json(response, 202, { projectId, deploymentId, webhookWarning });
   }
 
-  const match = url.pathname.match(/^\/api\/projects\/([a-f0-9]{16})(?:\/(status|logs|rollback))?$/);
+  const match = url.pathname.match(/^\/api\/projects\/([a-f0-9]{16})(?:\/(status|logs|deploy|rollback))?$/);
   if (match) {
     const result = await pool.query("SELECT * FROM projects WHERE id=$1 AND user_id=$2", [match[1], user.id]);
     const project = result.rows[0];
@@ -283,6 +288,12 @@ async function api(request, response, url) {
       return json(response, 200, { id: project.id, name: project.name, domain: project.domain, framework: project.framework, status: job?.status === "healthy" ? "online" : job?.status || project.status, deploymentId: project.current_deployment, steps: job?.steps || [] });
     }
     if (action === "logs" && request.method === "GET") return json(response, 200, await agent(`/actions/logs?projectId=${project.id}`));
+    if (action === "deploy" && request.method === "POST") {
+      if (["queued", "deploying"].includes(project.status)) return json(response, 409, { error: "Ein Deployment läuft bereits." });
+      const deploymentId = await startDeployment(project, githubToken);
+      return json(response, 202, { deploymentId });
+    }
+
     if (action === "rollback" && request.method === "POST") {
       const deployments = await pool.query("SELECT id,image_tag FROM deployments WHERE project_id=$1 AND status='healthy' AND image_tag IS NOT NULL ORDER BY created_at DESC LIMIT 5", [project.id]);
       const target = deployments.rows.find((deployment) => deployment.id !== project.current_deployment);
