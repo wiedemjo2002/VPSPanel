@@ -90,6 +90,7 @@ cd "$INSTALL_DIR"
 if [[ ! -f .env ]]; then
   DB_PASSWORD="$(openssl rand -hex 24)"
   SESSION_SECRET="$(openssl rand -hex 32)"
+  AGENT_TOKEN="$(openssl rand -hex 32)"
   if [[ -n "$PANEL_DOMAIN" ]]; then
     SITE_ADDRESS="$PANEL_DOMAIN"
     PUBLIC_URL="https://$PANEL_DOMAIN"
@@ -100,13 +101,14 @@ if [[ ! -f .env ]]; then
   fi
   umask 077
   cat > .env <<EOF
-VPSPANEL_VERSION=0.1.0
+VPSPANEL_VERSION=0.2.0
 PANEL_SITE_ADDRESS=$SITE_ADDRESS
 PANEL_PUBLIC_URL=$PUBLIC_URL
 POSTGRES_DB=vpspanel
 POSTGRES_USER=vpspanel
 POSTGRES_PASSWORD=$DB_PASSWORD
 SESSION_SECRET=$SESSION_SECRET
+AGENT_TOKEN=$AGENT_TOKEN
 GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
 EOF

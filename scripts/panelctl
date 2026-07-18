@@ -17,12 +17,14 @@ usage() {
 Usage: panelctl <command>
 
   status              Show service health
-  logs [service]      Follow logs (panel, caddy, or database)
+  logs [service]      Follow logs (panel, agent, caddy, or database)
   restart             Restart all services
   update              Pull the current branch and rebuild safely
   backup              Back up the panel database and configuration
   doctor              Check Docker, services, ports, disk, and HTTP health
   domain <hostname>   Configure the panel domain and automatic HTTPS
+  github setup        Configure GitHub OAuth securely
+  github status       Show whether GitHub OAuth is configured
   uninstall [--yes]   Remove containers and the installation
   version             Show the installed version
 EOF
@@ -77,6 +79,31 @@ case "${1:-}" in
     available_kb="$(df -Pk "$VPSPANEL_HOME" | awk 'NR==2 {print $4}')"
     if (( available_kb >= 2097152 )); then printf '✓ At least 2 GB disk space available\n'; else printf '✗ Less than 2 GB disk space available\n'; failures=$((failures + 1)); fi
     exit "$failures"
+    ;;
+  github)
+    require_root
+    case "${2:-status}" in
+      setup)
+        read -r -p "GitHub OAuth Client ID: " client_id
+        read -r -s -p "GitHub OAuth Client Secret: " client_secret
+        echo
+        [[ "$client_id" =~ ^[A-Za-z0-9_]{10,}$ ]] || { echo "Invalid GitHub Client ID." >&2; exit 1; }
+        [[ "$client_secret" =~ ^[A-Fa-f0-9]{20,}$ ]] || { echo "Invalid GitHub Client Secret." >&2; exit 1; }
+        sed -i "s|^GITHUB_CLIENT_ID=.*|GITHUB_CLIENT_ID=$client_id|; s|^GITHUB_CLIENT_SECRET=.*|GITHUB_CLIENT_SECRET=$client_secret|" .env
+        compose up -d --force-recreate panel
+        echo "GitHub OAuth configured."
+        echo "Callback URL: ${PANEL_PUBLIC_URL}/api/auth/github/callback"
+        ;;
+      status)
+        if [[ -n "${GITHUB_CLIENT_ID:-}" && -n "${GITHUB_CLIENT_SECRET:-}" ]]; then
+          echo "GitHub OAuth is configured."
+        else
+          echo "GitHub OAuth is not configured."
+          echo "Run: sudo panelctl github setup"
+        fi
+        ;;
+      *) echo "Usage: panelctl github <setup|status>" >&2; exit 1 ;;
+    esac
     ;;
   domain)
     require_root

@@ -4,6 +4,7 @@ services:
   caddy:
     image: caddy:2.10.0-alpine
     restart: unless-stopped
+    command: ["caddy", "run", "--config", "/runtime/Caddyfile", "--adapter", "caddyfile"]
     depends_on:
       panel:
         condition: service_healthy
@@ -14,7 +15,7 @@ services:
       - "443:443"
       - "8080:8080"
     volumes:
-      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_runtime:/runtime
       - caddy_data:/data
       - caddy_config:/config
     networks:
@@ -27,6 +28,8 @@ services:
     depends_on:
       database:
         condition: service_healthy
+      agent:
+        condition: service_healthy
     environment:
       PORT: 3000
       PANEL_PUBLIC_URL: ${PANEL_PUBLIC_URL:-http://localhost:8080}
@@ -34,6 +37,9 @@ services:
       SESSION_SECRET: ${SESSION_SECRET}
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      AGENT_URL: http://agent:3100
+      AGENT_TOKEN: ${AGENT_TOKEN}
+      E2E_SESSION_TOKEN: ${E2E_SESSION_TOKEN:-}
     healthcheck:
       test: ["CMD", "node", "healthcheck.js"]
       interval: 10s
@@ -42,6 +48,29 @@ services:
     networks:
       - edge
       - internal
+
+  agent:
+    build:
+      context: ./apps/agent
+    restart: unless-stopped
+    environment:
+      PORT: 3100
+      AGENT_TOKEN: ${AGENT_TOKEN}
+      PROJECTS_ROOT: /data/projects
+      EDGE_NETWORK: vpspanel_edge
+      CADDY_CONFIG_PATH: /caddy/Caddyfile
+      CADDY_CONTAINER: vpspanel-caddy-1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - projects_data:/data/projects
+      - caddy_runtime:/caddy
+    healthcheck:
+      test: ["CMD", "node", "healthcheck.js"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks:
+      - edge
 
   database:
     image: postgres:17.5-alpine
@@ -68,4 +97,6 @@ networks:
 volumes:
   caddy_data:
   caddy_config:
+  caddy_runtime:
   postgres_data:
+  projects_data:

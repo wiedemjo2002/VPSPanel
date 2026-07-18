@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#080c18" />
+    <title>VPSPanel</title>
+    <link rel="stylesheet" href="/dashboard.css" />
+  </head>
+  <body>
+    <div class="noise"></div>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="VPSPanel Startseite"><span class="brand-mark">V</span><span>VPSPanel</span></a>
+      <div class="top-actions">
+        <span class="server-badge"><i></i> Server bereit</span>
+        <button class="avatar-button hidden" id="accountButton" aria-label="Account"></button>
+      </div>
+    </header>
+
+    <main>
+      <section class="landing" id="landingView">
+        <p class="eyebrow">DEIN SERVER. OHNE SERVERKRAM.</p>
+        <h1>Was möchtest du<br /><span>online bringen?</span></h1>
+        <p class="intro">Verbinde dein GitHub-Repository. Domain, HTTPS, Datenbank und Deployment übernehmen wir.</p>
+        <a class="primary hero-button" id="githubButton" href="/api/auth/github">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 19c-4 1.5-4-2.5-5-3m10 6v-3.9c0-1.1.1-1.5-.5-2.1 2.8-.3 5.7-1.4 5.7-6A4.7 4.7 0 0 0 18 6.7a4.3 4.3 0 0 0-.1-3.3s-1-.3-3.4 1.3a11.7 11.7 0 0 0-6 0C6.1 3.1 5 3.4 5 3.4A4.3 4.3 0 0 0 5 6.7a4.7 4.7 0 0 0-1.2 3.4c0 4.6 2.8 5.6 5.7 6-.6.5-.6 1-.5 2V22"/></svg>
+          Mit GitHub starten <span>→</span>
+        </a>
+        <p class="hint" id="setupHint">Keine Docker-Kenntnisse nötig. Keine Kreditkarte.</p>
+        <div class="flow" aria-label="Deployment-Ablauf">
+          <article><b>01</b><div class="flow-icon">⌘</div><h2>Repository</h2><p>Wähle dein Projekt aus.</p></article>
+          <div class="connector"></div>
+          <article><b>02</b><div class="flow-icon">◇</div><h2>Domain</h2><p>Sag uns, wo es laufen soll.</p></article>
+          <div class="connector"></div>
+          <article><b>03</b><div class="flow-icon accent">↗</div><h2>Online</h2><p>Wir erledigen den Rest.</p></article>
+        </div>
+      </section>
+
+      <section class="dashboard hidden" id="dashboardView">
+        <div class="dashboard-heading">
+          <div><p class="eyebrow">PROJEKTE</p><h1>Deine Apps</h1><p>Alles Wichtige auf einen Blick.</p></div>
+          <button class="primary" id="newProjectButton">+ App deployen</button>
+        </div>
+        <div class="project-grid" id="projectGrid"></div>
+        <div class="empty hidden" id="emptyState">
+          <div class="empty-icon">↗</div><h2>Deine erste App wartet</h2>
+          <p>Wähle ein Repository aus. Den Serverkram übernehmen wir.</p>
+          <button class="primary" id="emptyDeployButton">App deployen</button>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="deployDialog">
+      <div class="dialog-head"><div><p class="eyebrow">NEUES PROJEKT</p><h2 id="dialogTitle">Repository auswählen</h2></div><button class="close" data-close aria-label="Schließen">×</button></div>
+      <div class="dialog-body">
+        <section id="repositoryStep">
+          <label class="field"><span>GitHub-Repository</span><select id="repositorySelect"><option value="">Repository wird geladen …</option></select></label>
+          <label class="field"><span>Branch</span><input id="branchInput" value="main" /></label>
+          <button class="primary full" id="inspectButton">Projekt analysieren <span>→</span></button>
+        </section>
+
+        <section class="hidden" id="configureStep">
+          <div class="detected" id="detectedSummary"></div>
+          <label class="field"><span>Domain</span><input id="domainInput" placeholder="app.meinedomain.de" autocomplete="off" /></label>
+          <label class="check-row"><input type="checkbox" id="databaseInput" /><span><b>PostgreSQL automatisch erstellen</b><small>Sicheres Passwort und DATABASE_URL inklusive</small></span></label>
+          <label class="check-row"><input type="checkbox" id="autoDeployInput" checked /><span><b>Bei jedem Push neu deployen</b><small>VPSPanel richtet den GitHub-Webhook automatisch ein</small></span></label>
+          <div id="environmentFields"></div>
+          <details><summary>Erweiterte Einstellungen</summary><div class="advanced" id="advancedSummary"></div></details>
+          <button class="primary full" id="deploySubmitButton">App online bringen <span>→</span></button>
+        </section>
+
+        <section class="hidden progress" id="progressStep">
+          <div class="progress-orb"><i></i></div>
+          <h2 id="progressTitle">Deine App wird vorbereitet</h2>
+          <p id="progressSubtitle">Das dauert beim ersten Build normalerweise ein paar Minuten.</p>
+          <div class="steps" id="deploymentSteps"></div>
+          <a class="primary full hidden" id="openAppButton" target="_blank" rel="noreferrer">App öffnen <span>↗</span></a>
+        </section>
+        <p class="form-error hidden" id="formError"></p>
+      </div>
+    </dialog>
+
+    <dialog class="log-dialog" id="logDialog">
+      <div class="dialog-head"><div><p class="eyebrow">LIVE-AUSGABE</p><h2>Logs</h2></div><button class="close" data-close-logs aria-label="Schließen">×</button></div>
+      <pre id="logOutput">Logs werden geladen …</pre>
+    </dialog>
+
+    <footer><span>Open Source · Self-hosted</span><span id="version">VPSPanel</span></footer>
+    <script src="/dashboard.js" type="module"></script>
+  </body>
+</html>
