@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+VPSPANEL_HOME="${VPSPANEL_HOME:-/opt/vpspanel}"
+[[ -d "$VPSPANEL_HOME" ]] || { echo "VPSPanel not found in $VPSPANEL_HOME" >&2; exit 1; }
+cd "$VPSPANEL_HOME"
+set -a
+# shellcheck disable=SC1091
+source .env
+set +a
+
+compose() { docker compose "$@"; }
+require_root() { [[ $EUID -eq 0 ]] || { echo "Run this command with sudo." >&2; exit 1; }; }
+
+usage() {
+  cat <<'EOF'
+Usage: panelctl <command>
+
+  status              Show service health
+  logs [service]      Follow logs (panel, caddy, or database)
+  restart             Restart all services
+  update              Pull the current branch and rebuild safely
+  backup              Back up the panel database and configuration
+  doctor              Check Docker, services, ports, disk, and HTTP health
+  domain <hostname>   Configure the panel domain and automatic HTTPS
+  uninstall [--yes]   Remove containers and the installation
+  version             Show the installed version
+EOF
+}
+
+case "${1:-}" in
+  status)
+    compose ps
+    ;;
+  logs)
+    shift
+    if [[ $# -gt 0 ]]; then
+      compose logs --tail 200 -f "$@"
+    else
+      compose logs --tail 200 -f
+    fi
+    ;;
+  restart)
+    require_root
+    compose restart
+    ;;
+  update)
+    require_root
+    "$0" backup
+    if [[ -d .git ]]; then
+      git pull --ff-only
+    else
+      echo "This installation has no Git metadata; reinstall from the public repository to enable updates." >&2
+      exit 1
+    fi
+    compose up -d --build --remove-orphans
+    compose exec -T panel node healthcheck.js
+    ;;
+  backup)
+    require_root
+    stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+    directory="$VPSPANEL_HOME/backups/$stamp"
+    install -d -m 0700 "$directory"
+    cp .env "$directory/env"
+    compose exec -T database pg_dump -U "${POSTGRES_USER:-vpspanel}" "${POSTGRES_DB:-vpspanel}" > "$directory/database.sql"
+    echo "Backup created: $directory"
+    ;;
+  doctor)
+    failures=0
+    check() { if eval "$2" >/dev/null 2>&1; then printf '✓ %s\n' "$1"; else printf '✗ %s\n' "$1"; failures=$((failures + 1)); fi; }
+    check "Docker daemon" "docker info"
+    check "Compose configuration" "compose config --quiet"
+    check "Panel container" "compose exec -T panel node healthcheck.js"
+    check "PostgreSQL" "compose exec -T database pg_isready -U vpspanel -d vpspanel"
+    check "Port 80 listening" "docker compose port caddy 80"
+    check "Port 443 listening" "docker compose port caddy 443"
+    available_kb="$(df -Pk "$VPSPANEL_HOME" | awk 'NR==2 {print $4}')"
+    if (( available_kb >= 2097152 )); then printf '✓ At least 2 GB disk space available\n'; else printf '✗ Less than 2 GB disk space available\n'; failures=$((failures + 1)); fi
+    exit "$failures"
+    ;;
+  domain)
+    require_root
+    domain="${2:-}"
+    [[ "$domain" =~ ^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$ ]] || { echo "Usage: panelctl domain panel.example.com" >&2; exit 1; }
+    sed -i "s|^PANEL_SITE_ADDRESS=.*|PANEL_SITE_ADDRESS=$domain|; s|^PANEL_PUBLIC_URL=.*|PANEL_PUBLIC_URL=https://$domain|" .env
+    compose up -d --force-recreate caddy panel
+    echo "Domain configured: https://$domain"
+    echo "Make sure its A/AAAA record points to this server."
+    ;;
+  uninstall)
+    require_root
+    if [[ "${2:-}" != "--yes" ]]; then
+      read -r -p "Remove VPSPanel and all panel data? Type 'remove': " answer
+      [[ "$answer" == "remove" ]] || { echo "Cancelled."; exit 0; }
+    fi
+    compose down --volumes --remove-orphans
+    rm -f /usr/local/bin/panelctl
+    echo "Containers and volumes were removed."
+    echo "The remaining files can be reviewed in: $VPSPANEL_HOME"
+    ;;
+  version)
+    grep '^VPSPANEL_VERSION=' .env | cut -d= -f2-
+    ;;
+  -h|--help|help|"") usage ;;
+  *) echo "Unknown command: $1" >&2; usage >&2; exit 1 ;;
+esac
