@@ -23,6 +23,7 @@ Usage: panelctl <command>
   backup              Back up the panel database and configuration
   doctor              Check Docker, services, ports, disk, and HTTP health
   domain <hostname>   Configure the panel domain and automatic HTTPS
+  language <de|en>   Set the installation-wide dashboard language
   github setup        Configure GitHub OAuth securely
   github status       Show whether GitHub OAuth is configured
   uninstall [--yes]   Remove containers and the installation
@@ -104,6 +105,18 @@ case "${1:-}" in
         ;;
       *) echo "Usage: panelctl github <setup|status>" >&2; exit 1 ;;
     esac
+    ;;
+  language)
+    require_root
+    language="${2:-}"
+    [[ "$language" == "de" || "$language" == "en" ]] || { echo "Usage: panelctl language <de|en>" >&2; exit 1; }
+    if grep -q '^PANEL_LANGUAGE=' .env; then
+      sed -i "s/^PANEL_LANGUAGE=.*/PANEL_LANGUAGE=$language/" .env
+    else
+      printf 'PANEL_LANGUAGE=%s\n' "$language" >> .env
+    fi
+    compose up -d --force-recreate panel
+    if [[ "$language" == "de" ]]; then echo "Standardsprache auf Deutsch gesetzt."; else echo "Default language set to English."; fi
     ;;
   domain)
     require_root

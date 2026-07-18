@@ -11,6 +11,7 @@ const port = Number(process.env.PORT || 3000);
 const publicUrl = process.env.PANEL_PUBLIC_URL || "http://localhost:8080";
 const agentUrl = process.env.AGENT_URL || "http://agent:3100";
 const agentToken = process.env.AGENT_TOKEN || "";
+const panelLanguage = ["de", "en"].includes(process.env.PANEL_LANGUAGE) ? process.env.PANEL_LANGUAGE : "de";
 const publicDirectory = fileURLToPath(new URL("./public", import.meta.url));
 const startedAt = new Date().toISOString();
 const types = { ".css": "text/css; charset=utf-8", ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".svg": "image/svg+xml" };
@@ -142,7 +143,7 @@ async function api(request, response, url) {
     await pool.query("SELECT 1");
     return json(response, 200, { status: "ok", service: "vpspanel", startedAt });
   }
-  if (url.pathname === "/api/meta") return json(response, 200, { publicUrl, githubConfigured: Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET), version: "0.2.0" });
+  if (url.pathname === "/api/meta") return json(response, 200, { publicUrl, githubConfigured: Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET), language: panelLanguage, version: "0.2.0" });
   if (url.pathname === "/api/webhooks/github" && request.method === "POST") return githubWebhook(request, response);
   if (url.pathname === "/api/e2e/session" && request.method === "GET" && process.env.E2E_SESSION_TOKEN) {
     if (!safeEqual(url.searchParams.get("token"), process.env.E2E_SESSION_TOKEN)) return json(response, 404, { error: "Not found" });

@@ -33,6 +33,7 @@ services:
     environment:
       PORT: 3000
       PANEL_PUBLIC_URL: ${PANEL_PUBLIC_URL:-http://localhost:8080}
+      PANEL_LANGUAGE: ${PANEL_LANGUAGE:-de}
       DATABASE_URL: postgresql://${POSTGRES_USER:-vpspanel}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB:-vpspanel}
       SESSION_SECRET: ${SESSION_SECRET}
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}

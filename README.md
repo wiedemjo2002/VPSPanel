@@ -14,6 +14,14 @@ Unter Ubuntu 24.04 oder Debian 12:
 curl -fsSL https://raw.githubusercontent.com/wiedemjo2002/VPSPanel/main/install.sh | sudo bash
 ~~~
 
+Deutsch ist die Standardsprache. Für eine englische Installation genügt ein zusätzlicher Parameter:
+
+~~~bash
+curl -fsSL https://raw.githubusercontent.com/wiedemjo2002/VPSPanel/main/install.sh | sudo bash -s -- --language en
+~~~
+
+Die Installationssprache wird zugleich zum Standard des Dashboards. Der DE/EN-Schalter oben rechts speichert die persönliche Auswahl nur lokal im jeweiligen Browser.
+
 Wenn panel.example.com bereits auf den Server zeigt:
 
 ~~~bash
@@ -57,6 +65,8 @@ sudo panelctl restart
 sudo panelctl backup
 sudo panelctl update
 sudo panelctl domain panel.example.com
+sudo panelctl language de
+sudo panelctl language en
 sudo panelctl github setup
 sudo panelctl uninstall
 ~~~
@@ -64,6 +74,8 @@ sudo panelctl uninstall
 Mit VPSPANEL_HOME kann ein abweichendes Installationsverzeichnis verwendet werden.
 
 ## Architektur
+
+Das Dashboard trägt ein dezentes „von Johannes Wiedemann“-Branding und bleibt vollständig self-hosted; die Sprachwahl benötigt keinen externen Dienst.
 
 - apps/panel: Weboberfläche, GitHub OAuth, Projekt- und Deployment-API
 - apps/agent: allow-listed Deploy-, Log- und Rollback-Aktionen

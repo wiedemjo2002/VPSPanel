@@ -6,16 +6,125 @@ const empty = $("#emptyState");
 const deployDialog = $("#deployDialog");
 const logDialog = $("#logDialog");
 const formError = $("#formError");
+
+const messages = {
+  de: {
+    brandBy: "von Johannes Wiedemann", serverReady: "Server bereit", heroEyebrow: "DEIN SERVER. OHNE SERVERKRAM.",
+    heroTitle: "Was möchtest du<br /><span>online bringen?</span>",
+    heroIntro: "Verbinde dein GitHub-Repository. Domain, HTTPS, Datenbank und Deployment übernehmen wir.",
+    startGithub: "Mit GitHub starten", heroHint: "Keine Docker-Kenntnisse nötig. Keine Kreditkarte.",
+    flowAria: "Deployment-Ablauf", repository: "Repository", flowRepo: "Wähle dein Projekt aus.",
+    domain: "Domain", flowDomain: "Sag uns, wo es laufen soll.", online: "Online", flowOnline: "Wir erledigen den Rest.",
+    projects: "PROJEKTE", yourApps: "Deine Apps", overview: "Alles Wichtige auf einen Blick.",
+    deployApp: "+ App deployen", firstApp: "Deine erste App wartet",
+    emptyIntro: "Wähle ein Repository aus. Den Serverkram übernehmen wir.", deployAppShort: "App deployen",
+    newProject: "NEUES PROJEKT", selectRepository: "Repository auswählen", close: "Schließen",
+    githubRepository: "GitHub-Repository", loadingRepository: "Repository wird geladen …",
+    analyzeProject: "Projekt analysieren", createPostgres: "PostgreSQL automatisch erstellen",
+    databaseHint: "Sicheres Passwort und DATABASE_URL inklusive", deployEveryPush: "Bei jedem Push neu deployen",
+    webhookHint: "VPSPanel richtet den GitHub-Webhook automatisch ein", advancedSettings: "Erweiterte Einstellungen",
+    bringOnline: "App online bringen", preparingApp: "Deine App wird vorbereitet",
+    firstBuildHint: "Das dauert beim ersten Build normalerweise ein paar Minuten.", openApp: "App öffnen",
+    liveOutput: "LIVE-AUSGABE", loadingLogs: "Logs werden geladen …", craftedBy: "Entwickelt von Johannes Wiedemann",
+    genericError: "Die Aktion ist fehlgeschlagen.", statusOnline: "Online", statusDeploying: "Wird deployed",
+    statusQueued: "Wartet", statusFailed: "Fehlgeschlagen", deployment: "Deployment",
+    viewLogs: "Logs ansehen", previousVersion: "Vorherige Version", privateSuffix: " · privat",
+    automatic: "Automatisch", detectedTitle: "Wir haben Folgendes erkannt", type: "Typ", port: "Port",
+    build: "Build", start: "Start", packageManager: "Paketmanager", migration: "Migration",
+    visibility: "Sichtbarkeit", privateLabel: "Privat", publicLabel: "Öffentlich", requiredValue: "Erforderlicher Wert",
+    reviewDeployment: "Deployment prüfen", selectRepoError: "Bitte wähle ein Repository aus.",
+    analyzing: "Projekt wird analysiert …", appOnline: "Deine App ist online", deployFailed: "Deployment fehlgeschlagen",
+    previousKeepsRunning: "Die vorherige Version läuft weiterhin, falls bereits eine vorhanden war.",
+    openLogsHint: "Öffne die Logs für die genaue Ursache.", domainRequired: "Bitte gib die Domain deiner App ein.",
+    deploymentRunning: "Deployment läuft", deploymentPreparing: "Deployment wird vorbereitet",
+    noLogs: "Noch keine Logs vorhanden.", rollbackConfirm: "Wirklich die vorherige funktionierende Version starten?",
+    githubNotConfigured: "GitHub OAuth ist noch nicht konfiguriert. Nutze panelctl github setup.",
+    signedInAs: "Angemeldet als", title: "VPSPanel · Johannes Wiedemann",
+    stepRepository: "Repository wird geladen", stepDatabase: "Datenbank wird erstellt", stepBuild: "App wird gebaut",
+    stepStart: "App wird gestartet", stepDomain: "Domain und HTTPS werden verbunden", stepCheck: "App wird geprüft",
+    stepRollback: "Vorherige Version wird gestartet"
+  },
+  en: {
+    brandBy: "by Johannes Wiedemann", serverReady: "Server ready", heroEyebrow: "YOUR SERVER. WITHOUT THE SERVER WORK.",
+    heroTitle: "What do you want to<br /><span>put online?</span>",
+    heroIntro: "Connect your GitHub repository. We handle the domain, HTTPS, database and deployment.",
+    startGithub: "Start with GitHub", heroHint: "No Docker knowledge required. No credit card.",
+    flowAria: "Deployment flow", repository: "Repository", flowRepo: "Choose your project.",
+    domain: "Domain", flowDomain: "Tell us where it should run.", online: "Online", flowOnline: "We handle the rest.",
+    projects: "PROJECTS", yourApps: "Your apps", overview: "Everything important at a glance.",
+    deployApp: "+ Deploy app", firstApp: "Your first app is waiting",
+    emptyIntro: "Choose a repository. We handle the server work.", deployAppShort: "Deploy app",
+    newProject: "NEW PROJECT", selectRepository: "Select repository", close: "Close",
+    githubRepository: "GitHub repository", loadingRepository: "Loading repositories …",
+    analyzeProject: "Analyze project", createPostgres: "Create PostgreSQL automatically",
+    databaseHint: "Secure password and DATABASE_URL included", deployEveryPush: "Deploy on every push",
+    webhookHint: "VPSPanel configures the GitHub webhook automatically", advancedSettings: "Advanced settings",
+    bringOnline: "Put app online", preparingApp: "Preparing your app",
+    firstBuildHint: "The first build usually takes a few minutes.", openApp: "Open app",
+    liveOutput: "LIVE OUTPUT", loadingLogs: "Loading logs …", craftedBy: "Built by Johannes Wiedemann",
+    genericError: "The action failed.", statusOnline: "Online", statusDeploying: "Deploying",
+    statusQueued: "Queued", statusFailed: "Failed", deployment: "Deployment",
+    viewLogs: "View logs", previousVersion: "Previous version", privateSuffix: " · private",
+    automatic: "Automatic", detectedTitle: "Here is what we detected", type: "Type", port: "Port",
+    build: "Build", start: "Start", packageManager: "Package manager", migration: "Migration",
+    visibility: "Visibility", privateLabel: "Private", publicLabel: "Public", requiredValue: "Required value",
+    reviewDeployment: "Review deployment", selectRepoError: "Please select a repository.",
+    analyzing: "Analyzing project …", appOnline: "Your app is online", deployFailed: "Deployment failed",
+    previousKeepsRunning: "The previous version remains online if one already exists.",
+    openLogsHint: "Open the logs to see the exact cause.", domainRequired: "Please enter your app domain.",
+    deploymentRunning: "Deployment running", deploymentPreparing: "Preparing deployment",
+    noLogs: "No logs available yet.", rollbackConfirm: "Start the previous working version?",
+    githubNotConfigured: "GitHub OAuth is not configured yet. Run panelctl github setup.",
+    signedInAs: "Signed in as", title: "VPSPanel · Johannes Wiedemann",
+    stepRepository: "Loading repository", stepDatabase: "Creating database", stepBuild: "Building app",
+    stepStart: "Starting app", stepDomain: "Connecting domain and HTTPS", stepCheck: "Checking app",
+    stepRollback: "Starting previous version"
+  }
+};
+
+let currentLanguage = "de";
 let repositories = [];
+let currentProjects = [];
 let inspection = null;
 let selectedRepository = null;
 let pollingTimer = null;
+
+function t(key) {
+  return messages[currentLanguage][key] || messages.de[key] || key;
+}
 
 function element(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
   if (text !== undefined) node.textContent = text;
   return node;
+}
+
+function applyLanguage(language, persist) {
+  currentLanguage = language === "en" ? "en" : "de";
+  document.documentElement.lang = currentLanguage;
+  document.title = t("title");
+  document.querySelectorAll("[data-i18n]").forEach((node) => { node.textContent = t(node.dataset.i18n); });
+  document.querySelectorAll("[data-i18n-html]").forEach((node) => { node.innerHTML = t(node.dataset.i18nHtml); });
+  document.querySelectorAll("[data-i18n-aria]").forEach((node) => { node.setAttribute("aria-label", t(node.dataset.i18nAria)); });
+  document.querySelectorAll("[data-language]").forEach((button) => {
+    const active = button.dataset.language === currentLanguage;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  if (persist) {
+    try { window.localStorage.setItem("vpspanel_language", currentLanguage); } catch {}
+  }
+  if (currentProjects.length) renderProjects();
+  if (inspection && !$("#configureStep").classList.contains("hidden")) showInspection(inspection);
+}
+
+function preferredLanguage(serverDefault) {
+  try {
+    const local = window.localStorage.getItem("vpspanel_language");
+    if (local === "de" || local === "en") return local;
+  } catch {}
+  return serverDefault === "en" ? "en" : "de";
 }
 
 async function api(path, options = {}) {
@@ -25,8 +134,9 @@ async function api(path, options = {}) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(data.error || "Die Aktion ist fehlgeschlagen.");
+    const error = new Error(data.error || t("genericError"));
     error.data = data;
+    error.status = response.status;
     throw error;
   }
   return data;
@@ -43,7 +153,7 @@ function clearError() {
 }
 
 function statusLabel(status) {
-  return ({ online: "Online", healthy: "Online", deploying: "Wird deployed", queued: "Wartet", failed: "Fehlgeschlagen" })[status] || status;
+  return ({ online: t("statusOnline"), healthy: t("statusOnline"), deploying: t("statusDeploying"), queued: t("statusQueued"), failed: t("statusFailed") })[status] || status;
 }
 
 function projectCard(project) {
@@ -54,38 +164,42 @@ function projectCard(project) {
   const titleBlock = element("div");
   titleBlock.append(element("h2", "", project.name));
   const domain = element("a", "domain-link", project.domain);
-  domain.href = `https://${project.domain}`;
+  domain.href = "https://" + project.domain;
   domain.target = "_blank";
   domain.rel = "noreferrer";
   titleBlock.append(domain);
   nameRow.append(icon, titleBlock);
-  const state = element("div", `status ${project.status}`);
+  const state = element("div", "status " + project.status);
   state.append(element("i", "status-dot"), document.createTextNode(statusLabel(project.status)));
   top.append(nameRow, state);
 
   const meta = element("div", "project-meta");
-  meta.append(element("span", "", project.framework), element("span", "", `Deployment ${project.current_deployment?.slice(0, 7) || "–"}`));
+  meta.append(element("span", "", project.framework), element("span", "", t("deployment") + " " + (project.current_deployment?.slice(0, 7) || "–")));
   const actions = element("div", "card-actions");
-  const logs = element("button", "secondary", "Logs ansehen");
+  const logs = element("button", "secondary", t("viewLogs"));
   logs.addEventListener("click", () => showLogs(project.id));
-  const rollback = element("button", "secondary", "Vorherige Version");
+  const rollback = element("button", "secondary", t("previousVersion"));
   rollback.addEventListener("click", () => rollbackProject(project.id));
   actions.append(logs, rollback);
   card.append(top, meta, actions);
   return card;
 }
 
+function renderProjects() {
+  grid.replaceChildren(...currentProjects.map(projectCard));
+  empty.classList.toggle("hidden", currentProjects.length > 0);
+}
+
 async function loadProjects() {
-  const projects = await api("/api/projects");
-  grid.replaceChildren(...projects.map(projectCard));
-  empty.classList.toggle("hidden", projects.length > 0);
+  currentProjects = await api("/api/projects");
+  renderProjects();
 }
 
 async function loadRepositories() {
   const select = $("#repositorySelect");
-  select.replaceChildren(new Option("Repository wird geladen …", ""));
+  select.replaceChildren(new Option(t("loadingRepository"), ""));
   repositories = await api("/api/github/repos");
-  select.replaceChildren(new Option("Repository auswählen", ""), ...repositories.map((repo, index) => new Option(`${repo.fullName}${repo.private ? " · privat" : ""}`, String(index))));
+  select.replaceChildren(new Option(t("selectRepository"), ""), ...repositories.map((repo, index) => new Option(repo.fullName + (repo.private ? t("privateSuffix") : ""), String(index))));
 }
 
 function resetDialog() {
@@ -95,7 +209,7 @@ function resetDialog() {
   $("#repositoryStep").classList.remove("hidden");
   $("#configureStep").classList.add("hidden");
   $("#progressStep").classList.add("hidden");
-  $("#dialogTitle").textContent = "Repository auswählen";
+  $("#dialogTitle").textContent = t("selectRepository");
   $("#repositorySelect").value = "";
   $("#branchInput").value = "main";
   $("#domainInput").value = "";
@@ -112,18 +226,18 @@ async function openDeploy() {
 
 function summaryLine(label, value) {
   const row = element("div");
-  row.append(element("b", "", `${label}: `), document.createTextNode(value || "Automatisch"));
+  row.append(element("b", "", label + ": "), document.createTextNode(value || t("automatic")));
   return row;
 }
 
 function showInspection(result) {
   const box = $("#detectedSummary");
-  const title = element("h3", "", "Wir haben Folgendes erkannt");
+  const title = element("h3", "", t("detectedTitle"));
   const details = element("div", "detected-grid");
-  details.append(summaryLine("Typ", result.framework), summaryLine("Port", String(result.port)), summaryLine("Build", result.buildCommand), summaryLine("Start", result.startCommand));
+  details.append(summaryLine(t("type"), result.framework), summaryLine(t("port"), String(result.port)), summaryLine(t("build"), result.buildCommand), summaryLine(t("start"), result.startCommand));
   box.replaceChildren(title, details);
   const advanced = $("#advancedSummary");
-  advanced.replaceChildren(summaryLine("Paketmanager", result.packageManager), summaryLine("Migration", result.migrationCommand), summaryLine("Branch", result.branch), summaryLine("Sichtbarkeit", result.private ? "Privat" : "Öffentlich"));
+  advanced.replaceChildren(summaryLine(t("packageManager"), result.packageManager), summaryLine(t("migration"), result.migrationCommand), summaryLine("Branch", result.branch), summaryLine(t("visibility"), result.private ? t("privateLabel") : t("publicLabel")));
   const fields = $("#environmentFields");
   fields.replaceChildren(...result.missingVariables.map((name) => {
     const label = element("label", "field");
@@ -132,41 +246,51 @@ function showInspection(result) {
     const input = element("input");
     input.type = "password";
     input.autocomplete = "off";
-    input.placeholder = "Erforderlicher Wert";
+    input.placeholder = t("requiredValue");
     label.append(input);
     return label;
   }));
   $("#repositoryStep").classList.add("hidden");
   $("#configureStep").classList.remove("hidden");
-  $("#dialogTitle").textContent = "Deployment prüfen";
+  $("#dialogTitle").textContent = t("reviewDeployment");
 }
 
 async function inspectSelected() {
   clearError();
   const index = $("#repositorySelect").value;
-  if (index === "") return showError("Bitte wähle ein Repository aus.");
+  if (index === "") return showError(t("selectRepoError"));
   selectedRepository = repositories[Number(index)];
   const branch = $("#branchInput").value.trim() || selectedRepository.defaultBranch;
   const button = $("#inspectButton");
   button.disabled = true;
-  button.textContent = "Projekt wird analysiert …";
+  button.textContent = t("analyzing");
   try {
     inspection = await api("/api/inspect", { method: "POST", body: JSON.stringify({ owner: selectedRepository.owner, repo: selectedRepository.name, branch }) });
     showInspection(inspection);
   } catch (error) { showError(error.message); }
-  finally { button.disabled = false; button.innerHTML = "Projekt analysieren <span>→</span>"; }
+  finally { button.disabled = false; button.innerHTML = "<span>" + t("analyzeProject") + "</span><span>→</span>"; }
 }
 
 function environmentValues() {
   return Object.fromEntries([...document.querySelectorAll("#environmentFields .field")].map((field) => [field.dataset.variable, field.querySelector("input").value]));
 }
 
+function translatedStepName(name) {
+  return ({
+    "Repository wird geladen": t("stepRepository"), "Datenbank wird erstellt": t("stepDatabase"),
+    "App wird gebaut": t("stepBuild"), "App wird gestartet": t("stepStart"),
+    "Domain und HTTPS werden verbunden": t("stepDomain"), "App wird geprüft": t("stepCheck"),
+    "Vorherige Version wird gestartet": t("stepRollback")
+  })[name] || name;
+}
+
 function renderSteps(steps) {
   const container = $("#deploymentSteps");
   container.replaceChildren(...steps.map((step) => {
-    const row = element("div", `step ${step.status}`);
+    const row = element("div", "step " + step.status);
     const icon = step.status === "done" ? "✓" : step.status === "failed" ? "!" : step.status === "skipped" ? "–" : "·";
-    row.append(element("span", "step-icon", icon), element("span", "", step.detail ? `${step.name}: ${step.detail}` : step.name));
+    const name = translatedStepName(step.name);
+    row.append(element("span", "step-icon", icon), element("span", "", step.detail ? name + ": " + step.detail : name));
     return row;
   }));
 }
@@ -174,21 +298,21 @@ function renderSteps(steps) {
 async function pollDeployment(projectId) {
   window.clearTimeout(pollingTimer);
   try {
-    const status = await api(`/api/projects/${projectId}/status`);
+    const status = await api("/api/projects/" + projectId + "/status");
     renderSteps(status.steps || []);
     if (status.status === "online" || status.status === "healthy") {
-      $("#progressTitle").textContent = "Deine App ist online";
+      $("#progressTitle").textContent = t("appOnline");
       $("#progressSubtitle").textContent = status.domain;
       const open = $("#openAppButton");
-      open.href = `https://${status.domain}`;
+      open.href = "https://" + status.domain;
       open.classList.remove("hidden");
       await loadProjects();
       return;
     }
     if (status.status === "failed") {
-      $("#progressTitle").textContent = "Deployment fehlgeschlagen";
-      $("#progressSubtitle").textContent = "Die vorherige Version läuft weiterhin, falls bereits eine vorhanden war.";
-      showError("Öffne die Logs für die genaue Ursache.");
+      $("#progressTitle").textContent = t("deployFailed");
+      $("#progressSubtitle").textContent = t("previousKeepsRunning");
+      showError(t("openLogsHint"));
       await loadProjects();
       return;
     }
@@ -202,7 +326,7 @@ async function pollDeployment(projectId) {
 async function deployProject() {
   clearError();
   const domain = $("#domainInput").value.trim().toLowerCase();
-  if (!domain) return showError("Bitte gib die Domain deiner App ein.");
+  if (!domain) return showError(t("domainRequired"));
   const button = $("#deploySubmitButton");
   button.disabled = true;
   try {
@@ -213,24 +337,24 @@ async function deployProject() {
     if (result.webhookWarning) showError(result.webhookWarning);
     $("#configureStep").classList.add("hidden");
     $("#progressStep").classList.remove("hidden");
-    $("#dialogTitle").textContent = "Deployment läuft";
-    renderSteps([{ name: "Deployment wird vorbereitet", status: "running" }]);
+    $("#dialogTitle").textContent = t("deploymentRunning");
+    renderSteps([{ name: t("deploymentPreparing"), status: "running" }]);
     await pollDeployment(result.projectId);
   } catch (error) { showError(error.message); }
   finally { button.disabled = false; }
 }
 
 async function showLogs(projectId) {
-  $("#logOutput").textContent = "Logs werden geladen …";
+  $("#logOutput").textContent = t("loadingLogs");
   logDialog.showModal();
-  try { $("#logOutput").textContent = (await api(`/api/projects/${projectId}/logs`)).logs || "Noch keine Logs vorhanden."; }
+  try { $("#logOutput").textContent = (await api("/api/projects/" + projectId + "/logs")).logs || t("noLogs"); }
   catch (error) { $("#logOutput").textContent = error.message; }
 }
 
 async function rollbackProject(projectId) {
-  if (!window.confirm("Wirklich die vorherige funktionierende Version starten?")) return;
+  if (!window.confirm(t("rollbackConfirm"))) return;
   try {
-    await api(`/api/projects/${projectId}/rollback`, { method: "POST", body: "{}" });
+    await api("/api/projects/" + projectId + "/rollback", { method: "POST", body: "{}" });
     await loadProjects();
   } catch (error) { window.alert(error.message); }
 }
@@ -238,11 +362,12 @@ async function rollbackProject(projectId) {
 async function initialize() {
   try {
     const meta = await api("/api/meta");
-    $("#version").textContent = `VPSPanel ${meta.version}`;
+    applyLanguage(preferredLanguage(meta.language), false);
+    $("#version").textContent = "VPSPanel " + meta.version;
     if (!meta.githubConfigured) {
       $("#githubButton").addEventListener("click", (event) => {
         event.preventDefault();
-        $("#setupHint").textContent = "GitHub OAuth ist noch nicht konfiguriert. Nutze panelctl github setup.";
+        $("#setupHint").textContent = t("githubNotConfigured");
         $("#setupHint").classList.add("error");
       });
     }
@@ -251,15 +376,18 @@ async function initialize() {
     dashboard.classList.remove("hidden");
     const account = $("#accountButton");
     account.classList.remove("hidden");
-    account.title = `Angemeldet als ${me.login}`;
-    if (me.avatarUrl) account.style.backgroundImage = `url(${JSON.stringify(me.avatarUrl).slice(1, -1)})`;
+    account.title = t("signedInAs") + " " + me.login;
+    if (me.avatarUrl) account.style.backgroundImage = "url(" + JSON.stringify(me.avatarUrl) + ")";
     account.addEventListener("click", async () => { await api("/api/logout", { method: "POST", body: "{}" }); window.location.href = "/"; });
     await loadProjects();
   } catch (error) {
-    if (!error.message.includes("GitHub anmelden")) console.warn(error);
+    if (error.status !== 401) console.warn(error);
   }
 }
 
+document.querySelectorAll("[data-language]").forEach((button) => {
+  button.addEventListener("click", () => applyLanguage(button.dataset.language, true));
+});
 $("#newProjectButton").addEventListener("click", openDeploy);
 $("#emptyDeployButton").addEventListener("click", openDeploy);
 $("#inspectButton").addEventListener("click", inspectSelected);
