@@ -2,7 +2,7 @@
 
 VPSPanel macht aus einem frischen Ubuntu- oder Debian-VPS eine kleine Self-Hosting-Plattform:
 
-> GitHub-Repository w?hlen, Domain eintragen, online.
+> GitHub-Repository wählen, Domain eintragen, online.
 
 Der Installer richtet Docker Engine, Docker Compose, Caddy, PostgreSQL, das Panel und den Deployment-Agenten automatisch ein.
 
@@ -20,11 +20,11 @@ Wenn panel.example.com bereits auf den Server zeigt:
 curl -fsSL https://raw.githubusercontent.com/wiedemjo2002/VPSPanel/main/install.sh | sudo bash -s -- --domain panel.example.com
 ~~~
 
-Der Installer ist idempotent, installiert Docker aus dem offiziellen Docker-Repository, erzeugt starke lokale Secrets, startet den Compose-Stack und wartet auf alle Healthchecks. Die Installation liegt standardm??ig unter /opt/vpspanel.
+Der Installer ist idempotent, installiert Docker aus dem offiziellen Docker-Repository, erzeugt starke lokale Secrets, startet den Compose-Stack und wartet auf alle Healthchecks. Die Installation liegt standardmäßig unter /opt/vpspanel.
 
 ## Einmalige GitHub-Einrichtung
 
-1. In GitHub unter **Settings ? Developer settings ? OAuth Apps** eine OAuth App anlegen.
+1. In GitHub unter **Settings → Developer settings → OAuth Apps** eine OAuth App anlegen.
 2. Als Homepage die Panel-URL und als Callback PANEL-URL/api/auth/github/callback eintragen.
 3. Zugangsdaten sicher hinterlegen:
 
@@ -37,14 +37,14 @@ panelctl fragt Client-ID und Client-Secret interaktiv ab; das Secret erscheint n
 
 ## User-Flow
 
-1. Mit GitHub anmelden und ein Repository ausw?hlen.
+1. Mit GitHub anmelden und ein Repository auswählen.
 2. VPSPanel erkennt statische Sites, Node.js, Next.js und FastAPI sowie fehlende Umgebungsvariablen.
 3. Domain eintragen und optional eine eigene PostgreSQL-Datenbank aktivieren.
 4. Deployment starten; Build, Container, Healthcheck, Caddy-Route und HTTPS laufen automatisch.
-5. Standardm??ig wird ein signierter GitHub-Webhook angelegt. Jeder Push auf den gew?hlten Branch deployt neu.
-6. Logs ansehen oder mit einem Klick auf die letzte funktionierende Version zur?ckrollen.
+5. Standardmäßig wird ein signierter GitHub-Webhook angelegt. Jeder Push auf den gewählten Branch deployt neu.
+6. Logs ansehen oder mit einem Klick auf die letzte funktionierende Version zurückrollen.
 
-F?r das automatische Anlegen des Webhooks ben?tigt der angemeldete GitHub-Benutzer Admin-Rechte am Repository. Schl?gt nur die Webhook-Einrichtung fehl, l?uft das erste Deployment trotzdem und das Panel zeigt einen verst?ndlichen Hinweis.
+Für das automatische Anlegen des Webhooks benötigt der angemeldete GitHub-Benutzer Admin-Rechte am Repository. Schlägt nur die Webhook-Einrichtung fehl, läuft das erste Deployment trotzdem und das Panel zeigt einen verständlichen Hinweis.
 
 ## Betrieb mit panelctl
 
@@ -65,15 +65,15 @@ Mit VPSPANEL_HOME kann ein abweichendes Installationsverzeichnis verwendet werde
 
 ## Architektur
 
-- apps/panel: Weboberfl?che, GitHub OAuth, Projekt- und Deployment-API
+- apps/panel: Weboberfläche, GitHub OAuth, Projekt- und Deployment-API
 - apps/agent: allow-listed Deploy-, Log- und Rollback-Aktionen
-- docker/Caddyfile: ?ffentlicher Reverse Proxy und automatische Zertifikate
-- database: interne Panel-Metadatenbank ohne ver?ffentlichten Host-Port
-- scripts/panelctl: kleines Werkzeug f?r den t?glichen Betrieb
+- docker/Caddyfile: öffentlicher Reverse Proxy und automatische Zertifikate
+- database: interne Panel-Metadatenbank ohne veröffentlichten Host-Port
+- scripts/panelctl: kleines Werkzeug für den täglichen Betrieb
 
-Projektcontainer h?ngen nur am Edge-Netzwerk. Optionale Projekt-Datenbanken erhalten ein eigenes internes Docker-Netzwerk und keinen Host-Port. Der Caddy-Admin-Endpunkt ist nur im Caddy-Container erreichbar.
+Projektcontainer hängen nur am Edge-Netzwerk. Optionale Projekt-Datenbanken erhalten ein eigenes internes Docker-Netzwerk und keinen Host-Port. Der Caddy-Admin-Endpunkt ist nur im Caddy-Container erreichbar.
 
-Der Deployment-Agent ben?tigt den Docker-Socket und ist deshalb ein sicherheitskritischer Bestandteil. Seine HTTP-API ist nicht ?ffentlich erreichbar, verlangt ein zuf?lliges Agent-Token und akzeptiert ausschlie?lich validierte, fest definierte Aktionen; sie stellt keine freie Shell bereit.
+Der Deployment-Agent benötigt den Docker-Socket und ist deshalb ein sicherheitskritischer Bestandteil. Seine HTTP-API ist nicht öffentlich erreichbar, verlangt ein zufälliges Agent-Token und akzeptiert ausschließlich validierte, fest definierte Aktionen; sie stellt keine freie Shell bereit.
 
 ## Entwicklung und Tests
 
@@ -83,9 +83,9 @@ cp .env.example .env
 docker compose up --build
 ~~~
 
-?ffne danach http://localhost:8080.
+Öffne danach http://localhost:8080.
 
-Relevante Pr?fungen:
+Relevante Prüfungen:
 
 ~~~bash
 cd apps/panel && npm test && npm run check
@@ -97,11 +97,20 @@ sudo bash scripts/test-agent-database.sh
 sudo bash scripts/test-webhook-flow.sh
 ~~~
 
-Der Linux-Smoke-Test scripts/test-clean-install.sh pr?ft zus?tzlich den ver?ffentlichten Ein-Befehl-Installer in einer sauberen Umgebung.
+Der Linux-Smoke-Test scripts/test-clean-install.sh prüft zusätzlich den veröffentlichten Ein-Befehl-Installer in einer sauberen Umgebung.
 
 ## Bewusste MVP-Grenzen
 
-Nicht enthalten sind Mailhosting, DNS-Verwaltung, beliebige Compose-Stacks, Kubernetes, FTP, ein Dateimanager oder ein uneingeschr?nkter KI-/Root-Shell-Zugang.
+Nicht enthalten sind Mailhosting, DNS-Verwaltung, beliebige Compose-Stacks, Kubernetes, FTP, ein Dateimanager oder ein uneingeschränkter KI-/Root-Shell-Zugang.
+
+## Recht, Haftung und Betrieb in Deutschland
+
+VPSPanel ist Open-Source-Software unter der MIT-Lizenz und wird ohne zusätzliche Garantie bereitgestellt. Gesetzlich zwingende Haftung bleibt unberührt. Weil eine selbst gehostete Instanz technisch und rechtlich vom jeweiligen Betreiber verantwortet wird, enthält das Repository zwei verständliche Leitfäden:
+
+- [Rechtliche Hinweise und Haftung](docs/RECHTLICHE-HINWEISE-DE.md)
+- [Betreiber-Checkliste für Deutschland](docs/BETREIBER-CHECKLISTE-DE.md)
+
+Die Checkliste behandelt insbesondere Impressum, Datenschutzinformationen, technisch notwendige Cookies, Verträge, Backups und den hochprivilegierten Docker-Socket. Sie ist eine Orientierung und ersetzt keine Prüfung des konkreten öffentlichen oder gewerblichen Angebots.
 
 ## Lizenz
 
