@@ -24,6 +24,13 @@ services:
   panel:
     build:
       context: ./apps/panel
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     restart: unless-stopped
     depends_on:
       database:
@@ -53,10 +60,19 @@ services:
   agent:
     build:
       context: ./apps/agent
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=256m
+      - /run:rw,nosuid,nodev,size=16m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     restart: unless-stopped
     environment:
       PORT: 3100
       AGENT_TOKEN: ${AGENT_TOKEN}
+      DOCKER_CONFIG: /tmp/docker
       PROJECTS_ROOT: /data/projects
       EDGE_NETWORK: vpspanel_edge
       CADDY_CONFIG_PATH: /caddy/Caddyfile

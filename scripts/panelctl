@@ -91,6 +91,7 @@ case "${1:-}" in
         [[ "$client_id" =~ ^[A-Za-z0-9_]{10,}$ ]] || { echo "Invalid GitHub Client ID." >&2; exit 1; }
         [[ "$client_secret" =~ ^[A-Fa-f0-9]{20,}$ ]] || { echo "Invalid GitHub Client Secret." >&2; exit 1; }
         sed -i "s|^GITHUB_CLIENT_ID=.*|GITHUB_CLIENT_ID=$client_id|; s|^GITHUB_CLIENT_SECRET=.*|GITHUB_CLIENT_SECRET=$client_secret|" .env
+        chmod 0600 .env
         compose up -d --force-recreate panel
         echo "GitHub OAuth configured."
         echo "Callback URL: ${PANEL_PUBLIC_URL}/api/auth/github/callback"
@@ -115,6 +116,7 @@ case "${1:-}" in
     else
       printf 'PANEL_LANGUAGE=%s\n' "$language" >> .env
     fi
+    chmod 0600 .env
     compose up -d --force-recreate panel
     if [[ "$language" == "de" ]]; then echo "Standardsprache auf Deutsch gesetzt."; else echo "Default language set to English."; fi
     ;;
@@ -123,6 +125,7 @@ case "${1:-}" in
     domain="${2:-}"
     [[ "$domain" =~ ^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$ ]] || { echo "Usage: panelctl domain panel.example.com" >&2; exit 1; }
     sed -i "s|^PANEL_SITE_ADDRESS=.*|PANEL_SITE_ADDRESS=$domain|; s|^PANEL_PUBLIC_URL=.*|PANEL_PUBLIC_URL=https://$domain|" .env
+    chmod 0600 .env
     compose up -d --force-recreate caddy panel
     echo "Domain configured: https://$domain"
     echo "Make sure its A/AAAA record points to this server."

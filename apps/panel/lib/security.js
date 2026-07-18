@@ -1,6 +1,10 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 const publicUrl = process.env.PANEL_PUBLIC_URL || "http://localhost:8080";
+const parsedPublicUrl = new URL(publicUrl);
+if (!["http:", "https:"].includes(parsedPublicUrl.protocol) || parsedPublicUrl.username || parsedPublicUrl.password || parsedPublicUrl.pathname !== "/" || parsedPublicUrl.search || parsedPublicUrl.hash) {
+  throw new Error("PANEL_PUBLIC_URL must be an HTTP(S) origin without credentials, path, query, or hash");
+}
 const sessionSecret = process.env.SESSION_SECRET;
 if (!sessionSecret || sessionSecret.length < 32 || sessionSecret === "change-me") throw new Error("SESSION_SECRET must contain at least 32 characters");
 const key = createHash("sha256").update(sessionSecret).digest();
@@ -29,10 +33,17 @@ export function safeEqual(a, b) {
 }
 
 export function parseCookies(request) {
-  return Object.fromEntries((request.headers.cookie || "").split(";").filter(Boolean).map((item) => {
+  const result = {};
+  for (const item of (request.headers.cookie || "").split(";").filter(Boolean)) {
     const index = item.indexOf("=");
-    return [item.slice(0, index).trim(), decodeURIComponent(item.slice(index + 1))];
-  }));
+    if (index <= 0) continue;
+    try {
+      result[item.slice(0, index).trim()] = decodeURIComponent(item.slice(index + 1));
+    } catch {
+      continue;
+    }
+  }
+  return result;
 }
 
 export function cookie(name, value, options = {}) {

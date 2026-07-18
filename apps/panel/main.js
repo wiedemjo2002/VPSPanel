@@ -11,18 +11,27 @@ const port = Number(process.env.PORT || 3000);
 const publicUrl = process.env.PANEL_PUBLIC_URL || "http://localhost:8080";
 const agentUrl = process.env.AGENT_URL || "http://agent:3100";
 const agentToken = process.env.AGENT_TOKEN || "";
+if (agentToken.length < 32 || agentToken === "change-me") throw new Error("AGENT_TOKEN must contain at least 32 characters");
 const panelLanguage = ["de", "en"].includes(process.env.PANEL_LANGUAGE) ? process.env.PANEL_LANGUAGE : "de";
 const publicDirectory = fileURLToPath(new URL("./public", import.meta.url));
 const startedAt = new Date().toISOString();
 const types = { ".css": "text/css; charset=utf-8", ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".svg": "image/svg+xml" };
+const securityHeaders = {
+  "Content-Security-Policy": "default-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; connect-src 'self'",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Cross-Origin-Opener-Policy": "same-origin",
+};
 
 function json(response, status, payload, headers = {}) {
-  response.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...headers });
+  response.writeHead(status, { ...securityHeaders, "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...headers });
   response.end(JSON.stringify(payload));
 }
 
 function redirect(response, location, headers = {}) {
-  response.writeHead(302, { Location: location, "Cache-Control": "no-store", ...headers });
+  response.writeHead(302, { ...securityHeaders, Location: location, "Cache-Control": "no-store", ...headers });
   response.end();
 }
 
@@ -46,6 +55,7 @@ function newId(bytes = 8) { return randomBytes(bytes).toString("hex"); }
 
 function checkWriteOrigin(request) {
   if (!["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) return true;
+  if (request.headers["sec-fetch-site"] === "cross-site") return false;
   const origin = request.headers.origin;
   return !origin || origin === new URL(publicUrl).origin;
 }
@@ -54,6 +64,7 @@ async function agent(path, options = {}) {
   const response = await fetch(`${agentUrl}${path}`, {
     ...options,
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${agentToken}`, ...options.headers },
+    signal: AbortSignal.timeout(30_000),
   });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(result.error || `Agent request failed (${response.status})`);
@@ -68,11 +79,11 @@ async function asset(request, response) {
   if (!filePath.startsWith(publicDirectory)) return json(response, 403, { error: "Forbidden" });
   try {
     const data = await readFile(filePath);
-    response.writeHead(200, { "Content-Type": types[extname(filePath)] || "application/octet-stream", "Cache-Control": requested === "/dashboard.html" ? "no-cache" : "public, max-age=3600" });
+    response.writeHead(200, { ...securityHeaders, "Content-Type": types[extname(filePath)] || "application/octet-stream", "Cache-Control": requested === "/dashboard.html" ? "no-cache" : "public, max-age=3600" });
     response.end(data);
   } catch {
     const data = await readFile(join(publicDirectory, "dashboard.html"));
-    response.writeHead(200, { "Content-Type": types[".html"], "Cache-Control": "no-cache" });
+    response.writeHead(200, { ...securityHeaders, "Content-Type": types[".html"], "Cache-Control": "no-cache" });
     response.end(data);
   }
 }
@@ -170,6 +181,7 @@ async function api(request, response, url) {
     const tokenResponse = await fetch("https://github.com/login/oauth/access_token", {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json", "User-Agent": "VPSPanel/0.2" },
+      signal: AbortSignal.timeout(15_000),
       body: JSON.stringify({ client_id: process.env.GITHUB_CLIENT_ID, client_secret: process.env.GITHUB_CLIENT_SECRET, code: url.searchParams.get("code"), redirect_uri: `${publicUrl}/api/auth/github/callback` }),
     });
     const tokenData = await tokenResponse.json();
@@ -295,6 +307,10 @@ const server = createServer(async (request, response) => {
     json(response, 500, { error: error.message?.startsWith("GitHub request") ? "GitHub konnte nicht erreicht werden." : "Die Aktion konnte nicht abgeschlossen werden." });
   }
 });
+server.requestTimeout = 30_000;
+server.headersTimeout = 15_000;
+server.keepAliveTimeout = 5_000;
+server.maxHeadersCount = 100;
 
 await initializeDatabase();
 server.listen(port, "0.0.0.0", () => console.log(`VPSPanel listening on :${port}`));

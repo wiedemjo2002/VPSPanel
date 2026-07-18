@@ -12,15 +12,43 @@ const appName = (id) => `vpspanel-app-${id}`;
 const dbName = (id) => `vpspanel-db-${id}`;
 const internalNetwork = (id) => `vpspanel-internal-${id}`;
 const imageName = (projectId, deploymentId) => `vpspanel-project-${projectId}:${deploymentId}`;
+const maxSourceBytes = 250 * 1024 * 1024;
+const panelRoute = `{$PANEL_SITE_ADDRESS::8080} {
+\tencode zstd gzip
+\treverse_proxy panel:3000
+\theader {
+\t\tStrict-Transport-Security "max-age=31536000"
+\t\tX-Content-Type-Options nosniff
+\t\tX-Frame-Options DENY
+\t\tReferrer-Policy strict-origin-when-cross-origin
+\t\tPermissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+\t\t-Server
+\t}
+}`;
+
+async function limitedResponseBuffer(response, limit = maxSourceBytes) {
+  const declared = Number(response.headers.get("content-length") || 0);
+  if (declared > limit) throw new Error("Repository archive is too large");
+  if (!response.body) throw new Error("Repository download returned no body");
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of response.body) {
+    size += chunk.length;
+    if (size > limit) throw new Error("Repository archive is too large");
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
+function renderCaddy(registry) {
+  const routes = Object.values(registry).map((route) => `${route.domain} {\n\tencode zstd gzip\n\treverse_proxy ${route.target}:${route.port}\n\theader {\n\t\tStrict-Transport-Security "max-age=31536000"\n\t\tX-Content-Type-Options nosniff\n\t\tReferrer-Policy strict-origin-when-cross-origin\n\t\tPermissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"\n\t\t-Server\n\t}\n}`).join("\n\n");
+  return `{\n\tadmin localhost:2019\n}\n\n${panelRoute}${routes ? `\n\n${routes}` : ""}\n`;
+}
 
 export async function initializeRuntime() {
   await mkdir(dirname(caddyConfigPath), { recursive: true });
-  try {
-    await readFile(caddyConfigPath, "utf8");
-  } catch {
-    const initial = `{\n\tadmin localhost:2019\n}\n\n{$PANEL_SITE_ADDRESS::8080} {\n\tencode zstd gzip\n\treverse_proxy panel:3000\n}\n`;
-    await writeFile(caddyConfigPath, initial);
-  }
+  await writeFile(caddyConfigPath, renderCaddy(await readRegistry()));
+  await command("docker", ["exec", caddyContainer, "caddy", "reload", "--config", "/runtime/Caddyfile", "--adapter", "caddyfile"]).catch(() => {});
 }
 export async function persist(job) {
   const directory = join(dataRoot, job.projectId, "jobs");
@@ -48,9 +76,10 @@ async function downloadSource(input, sourceDirectory) {
   const response = await fetch(`https://api.github.com/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repo)}/tarball/${encodeURIComponent(input.branch)}`, {
     headers,
     redirect: "follow",
+    signal: AbortSignal.timeout(300_000),
   });
   if (!response.ok) throw new Error(`Repository download failed (${response.status})`);
-  await writeFile(archive, Buffer.from(await response.arrayBuffer()), { mode: 0o600 });
+  await writeFile(archive, await limitedResponseBuffer(response), { mode: 0o600 });
   await command("tar", ["-xzf", archive, "-C", appDirectory, "--strip-components=1"]);
   await rm(archive, { force: true });
   return { appDirectory, commitSha: response.headers.get("etag")?.replaceAll('"', "") || null };
@@ -104,7 +133,7 @@ async function replaceApp(input, imageTag, envFile) {
     await command("docker", ["rename", name, previous]);
   }
   try {
-    await command("docker", ["run", "-d", "--name", name, "--restart", "unless-stopped", "--network", edgeNetwork, "--env-file", envFile, imageTag]);
+    await command("docker", ["run", "-d", "--name", name, "--restart", "unless-stopped", "--init", "--pids-limit", "512", "--security-opt", "no-new-privileges:true", "--network", edgeNetwork, "--env-file", envFile, imageTag]);
     if (input.database) await command("docker", ["network", "connect", internalNetwork(input.projectId), name]);
     if (input.config?.migrationCommand === "npx prisma migrate deploy") await command("docker", ["exec", name, "npx", "prisma", "migrate", "deploy"]);
     for (let attempt = 0; attempt < 40; attempt += 1) {
@@ -135,9 +164,7 @@ async function configureCaddy(input) {
   const registry = await readRegistry();
   registry[input.projectId] = { domain: input.domain, target: appName(input.projectId), port: input.port };
   await writeFile(join(dataRoot, "caddy-projects.json"), JSON.stringify(registry, null, 2), { mode: 0o600 });
-  const routes = Object.values(registry).map((route) => `${route.domain} {\n\tencode zstd gzip\n\treverse_proxy ${route.target}:${route.port}\n}`).join("\n\n");
-  const caddyfile = `{\n\tadmin localhost:2019\n}\n\n{$PANEL_SITE_ADDRESS::8080} {\n\tencode zstd gzip\n\treverse_proxy panel:3000\n}\n\n${routes}\n`;
-  await writeFile(caddyConfigPath, caddyfile);
+  await writeFile(caddyConfigPath, renderCaddy(registry));
   await command("docker", ["exec", caddyContainer, "caddy", "reload", "--config", "/runtime/Caddyfile", "--adapter", "caddyfile"]);
 }
 

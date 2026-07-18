@@ -87,6 +87,8 @@ Projektcontainer hängen nur am Edge-Netzwerk. Optionale Projekt-Datenbanken erh
 
 Der Deployment-Agent benötigt den Docker-Socket und ist deshalb ein sicherheitskritischer Bestandteil. Seine HTTP-API ist nicht öffentlich erreichbar, verlangt ein zufälliges Agent-Token und akzeptiert ausschließlich validierte, fest definierte Aktionen; sie stellt keine freie Shell bereit.
 
+Sichere Voreinstellungen sind ohne zusätzliche Einrichtung aktiv: Secrets liegen nur in einer auf den Administrator beschränkten `.env`, Panel und Agent verwenden schreibgeschützte Dateisysteme sowie minimale Linux-Rechte, Anfragen sind in Größe und Dauer begrenzt und das Dashboard liefert restriktive Browser-Sicherheitsheader. Gestartete Projekt-Container erhalten zusätzlich Prozesslimits und dürfen keine neuen Rechte erlangen. Diese Schutzmaßnahmen verändern weder den Ein-Befehl-Installer noch den normalen Ablauf im Dashboard.
+
 ## Entwicklung und Tests
 
 ~~~bash

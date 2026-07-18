@@ -147,6 +147,7 @@ elif grep -q '^PANEL_LANGUAGE=' .env; then
 else
   printf 'PANEL_LANGUAGE=%s\n' "$PANEL_LANG" >> .env
 fi
+chmod 0600 .env
 
 install -m 0755 scripts/panelctl /usr/local/bin/panelctl
 log "$(say "VPSPanel wird gebaut und gestartet" "Building and starting VPSPanel")"
