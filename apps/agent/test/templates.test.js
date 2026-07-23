@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { projectDockerfile } from "../lib/templates.js";
+import { renderCaddy } from "../lib/deployer.js";
 
 test("creates a pinned static runtime image", () => {
   const dockerfile = projectDockerfile({ framework: "static", config: {}, port: 80 });
@@ -22,4 +23,9 @@ test("creates a pinned FastAPI image", () => {
   const dockerfile = projectDockerfile({ framework: "fastapi", config: {}, port: 8000 });
   assert.match(dockerfile, /^FROM python:3\.13\.5-alpine/m);
   assert.match(dockerfile, /uvicorn main:app/);
+});
+test("renders a persisted HTTPS panel domain", () => {
+  const config = renderCaddy({}, "panel.example.com");
+  assert.match(config, /panel\.example\.com \{/);
+  assert.match(config, /reverse_proxy panel:3000/);
 });

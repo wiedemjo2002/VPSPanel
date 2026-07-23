@@ -17,12 +17,7 @@ die() { printf '\033[1;31m✗\033[0m %s\n' "$*" >&2; exit 1; }
 say() { if [[ "$PANEL_LANG" == "en" ]]; then printf '%s' "$2"; else printf '%s' "$1"; fi; }
 
 configure_firewall() {
-  local ports
-  if [[ -n "$PANEL_DOMAIN" ]]; then
-    ports=(80 443)
-  else
-    ports=(8080)
-  fi
+  local ports=(80 443 8080)
 
   if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then
     log "$(say "Firewall-Ports werden mit UFW freigegeben" "Opening firewall ports with UFW")"

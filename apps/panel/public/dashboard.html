@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#080c18" />
     <title>VPSPanel · Johannes Wiedemann</title>
-    <link rel="stylesheet" href="/dashboard.css?v=0.4.0" />
+    <link rel="stylesheet" href="/dashboard.css?v=0.5.0" />
   </head>
   <body>
     <div class="noise"></div>
@@ -33,7 +33,6 @@
           <label class="field"><span data-i18n="adminPassword">Admin-Passwort</span><input id="adminPasswordInput" type="password" autocomplete="current-password" required /></label>
           <button class="primary hero-button" type="submit"><span data-i18n="openPanel">Panel öffnen</span><span>→</span></button>
         </form>
-        <a class="github-option hidden" id="githubButton" href="/api/auth/github" data-i18n="optionalGithub">Optional mit GitHub anmelden</a>
         <p class="hint" id="setupHint" data-i18n="heroHint">Das Admin-Passwort wurde bei der Installation angezeigt.</p>
         <div class="flow" data-i18n-aria="flowAria" aria-label="Deployment-Ablauf">
           <article><b>01</b><div class="flow-icon">⌘</div><h2 data-i18n="repository">Repository</h2><p data-i18n="flowRepo">Wähle dein Projekt aus.</p></article>
@@ -89,6 +88,26 @@
       </div>
     </dialog>
 
+    <dialog id="accountDialog">
+      <div class="dialog-head"><div><p class="eyebrow" data-i18n="account">ACCOUNT</p><h2 data-i18n="securityAndHttps">Sicherheit & HTTPS</h2></div><button class="close" data-close-account data-i18n-aria="close" aria-label="Schließen">×</button></div>
+      <div class="dialog-body">
+        <div class="settings-status"><span data-i18n="currentAddress">Aktuelle Adresse</span><strong id="panelPublicUrl">–</strong></div>
+        <form id="httpsForm">
+          <label class="field"><span data-i18n="panelDomain">Domain für dein Panel</span><input id="panelDomainInput" placeholder="panel.meinedomain.de" autocomplete="off" /></label>
+          <p class="settings-help" data-i18n="httpsHelp">Der A-Record muss auf diesen VPS zeigen. VPSPanel konfiguriert Caddy und das Zertifikat automatisch.</p>
+          <button class="primary full" id="enableHttpsButton" type="submit"><span data-i18n="enableHttps">HTTPS aktivieren</span><span>🔒</span></button>
+        </form>
+        <div class="https-success hidden" id="httpsSuccess">
+          <strong data-i18n="httpsStarted">HTTPS wird eingerichtet</strong>
+          <p data-i18n="httpsWait">Caddy holt das Zertifikat automatisch. Das dauert meist nur wenige Sekunden.</p>
+          <a class="primary full" id="openSecurePanel" rel="noreferrer"><span data-i18n="openSecure">Sicheres Panel öffnen</span><span>↗</span></a>
+        </div>
+        <p class="form-error hidden" id="settingsError"></p>
+        <a class="secondary full github-option hidden" id="connectGithubButton" href="/api/auth/github" data-i18n="optionalGithub">Optional GitHub verbinden</a>
+        <button class="secondary full settings-logout" id="logoutButton" type="button" data-i18n="logout">Abmelden</button>
+      </div>
+    </dialog>
+
     <dialog class="log-dialog" id="logDialog">
       <div class="dialog-head"><div><p class="eyebrow" data-i18n="liveOutput">LIVE-AUSGABE</p><h2>Logs</h2></div><button class="close" data-close-logs data-i18n-aria="close" aria-label="Schließen">×</button></div>
       <pre id="logOutput" data-i18n="loadingLogs">Logs werden geladen …</pre>
@@ -98,6 +117,6 @@
       <span class="footer-signature"><strong>VPSPanel</strong><span data-i18n="craftedBy">Entwickelt von Johannes Wiedemann</span></span>
       <span id="version">VPSPanel</span>
     </footer>
-    <script src="/dashboard.js?v=0.4.0" type="module"></script>
+    <script src="/dashboard.js?v=0.5.0" type="module"></script>
   </body>
 </html>

@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { timingSafeEqual } from "node:crypto";
 import { readdir } from "node:fs/promises";
-import { deploy, rollback, persist, projectLogs, storedJob, initializeRuntime, dataRoot } from "./lib/deployer.js";
+import { configurePanelDomain, deploy, rollback, persist, projectLogs, storedJob, initializeRuntime, dataRoot } from "./lib/deployer.js";
 
 const port = Number(process.env.PORT || 3100);
 const token = process.env.AGENT_TOKEN || "";
@@ -79,7 +79,13 @@ const server = createServer(async (request, response) => {
   try {
     if (!authorized(request.headers.authorization)) return json(response, 401, { error: "Unauthorized" });
     const url = new URL(request.url, "http://localhost");
-    if (url.pathname === "/health") return json(response, 200, { status: "ok", actions: ["deploy", "logs", "rollback"] });
+    if (url.pathname === "/health") return json(response, 200, { status: "ok", actions: ["deploy", "logs", "rollback", "panel-domain"] });
+
+    if (url.pathname === "/actions/panel-domain" && request.method === "POST") {
+      const input = await body(request, 4096);
+      if (!validDomain(input.domain)) return json(response, 400, { error: "Invalid panel domain" });
+      return json(response, 200, await configurePanelDomain(input.domain.toLowerCase()));
+    }
 
     if (url.pathname === "/actions/deploy" && request.method === "POST") {
       const input = await body(request);

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 process.env.SESSION_SECRET = "test-secret-".padEnd(64, "x");
 process.env.PANEL_PUBLIC_URL = "https://panel.example.com";
 
-const { cookie, decrypt, encrypt, parseCookies, safeEqual } = await import("../lib/security.js");
+const { cookie, decrypt, encrypt, parseCookies, safeEqual, setCookieSecurity } = await import("../lib/security.js");
 
 test("encrypts sensitive values with authenticated encryption", () => {
   const value = { token: "github-token", nested: [1, 2, 3] };
@@ -28,4 +28,10 @@ test("creates secure browser session cookies on HTTPS", () => {
   assert.match(value, /HttpOnly/);
   assert.match(value, /Secure/);
   assert.match(value, /SameSite=Lax/);
+});
+test("switches session cookies to Secure after HTTPS activation", () => {
+  setCookieSecurity(false);
+  assert.doesNotMatch(cookie("session", "secret"), /Secure/);
+  setCookieSecurity(true);
+  assert.match(cookie("session", "secret"), /Secure/);
 });

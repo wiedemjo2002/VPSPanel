@@ -5,6 +5,7 @@ const grid = $("#projectGrid");
 const empty = $("#emptyState");
 const deployDialog = $("#deployDialog");
 const logDialog = $("#logDialog");
+const accountDialog = $("#accountDialog");
 const formError = $("#formError");
 
 const messages = {
@@ -13,7 +14,7 @@ const messages = {
     heroTitle: "Was möchtest du<br /><span>online bringen?</span>",
     heroIntro: "Öffentliche GitHub-URL einfügen und deployen. Ohne OAuth, ohne Serverkram.",
     startGithub: "Mit GitHub starten", heroHint: "Das Admin-Passwort wurde bei der Installation angezeigt.",
-    adminPassword: "Admin-Passwort", openPanel: "Panel öffnen", optionalGithub: "Optional mit GitHub anmelden",
+    adminPassword: "Admin-Passwort", openPanel: "Panel öffnen", optionalGithub: "GitHub verbinden",
     flowAria: "Deployment-Ablauf", repository: "Repository", flowRepo: "Wähle dein Projekt aus.",
     domain: "Domain", flowDomain: "Sag uns, wo es laufen soll.", online: "Online", flowOnline: "Wir erledigen den Rest.",
     projects: "PROJEKTE", yourApps: "Deine Apps", overview: "Alles Wichtige auf einen Blick.",
@@ -41,7 +42,9 @@ const messages = {
     deploymentRunning: "Deployment läuft", deploymentPreparing: "Deployment wird vorbereitet",
     noLogs: "Noch keine Logs vorhanden.", rollbackConfirm: "Wirklich die vorherige funktionierende Version starten?",
     githubNotConfigured: "GitHub OAuth ist noch nicht konfiguriert. Nutze panelctl github setup.",
-    signedInAs: "Angemeldet als", title: "VPSPanel · Johannes Wiedemann",
+    signedInAs: "Angemeldet als", account: "ACCOUNT", securityAndHttps: "Sicherheit & HTTPS", currentAddress: "Aktuelle Adresse",
+    panelDomain: "Domain für dein Panel", httpsHelp: "Der A-Record muss auf diesen VPS zeigen. VPSPanel konfiguriert Caddy und das Zertifikat automatisch.",
+    enableHttps: "HTTPS aktivieren", httpsStarted: "HTTPS wird eingerichtet", httpsWait: "Caddy holt das Zertifikat automatisch. Das dauert meist nur wenige Sekunden.", openSecure: "Sicheres Panel öffnen", logout: "Abmelden", title: "VPSPanel · Johannes Wiedemann",
     stepRepository: "Repository wird geladen", stepDatabase: "Datenbank wird erstellt", stepBuild: "App wird gebaut",
     stepStart: "App wird gestartet", stepDomain: "Domain und HTTPS werden verbunden", stepCheck: "App wird geprüft",
     stepRollback: "Vorherige Version wird gestartet"
@@ -51,7 +54,7 @@ const messages = {
     heroTitle: "What do you want to<br /><span>put online?</span>",
     heroIntro: "Paste a public GitHub URL and deploy. No OAuth, no server work.",
     startGithub: "Start with GitHub", heroHint: "The admin password was shown during installation.",
-    adminPassword: "Admin password", openPanel: "Open panel", optionalGithub: "Optionally sign in with GitHub",
+    adminPassword: "Admin password", openPanel: "Open panel", optionalGithub: "Connect GitHub",
     flowAria: "Deployment flow", repository: "Repository", flowRepo: "Choose your project.",
     domain: "Domain", flowDomain: "Tell us where it should run.", online: "Online", flowOnline: "We handle the rest.",
     projects: "PROJECTS", yourApps: "Your apps", overview: "Everything important at a glance.",
@@ -79,7 +82,9 @@ const messages = {
     deploymentRunning: "Deployment running", deploymentPreparing: "Preparing deployment",
     noLogs: "No logs available yet.", rollbackConfirm: "Start the previous working version?",
     githubNotConfigured: "GitHub OAuth is not configured yet. Run panelctl github setup.",
-    signedInAs: "Signed in as", title: "VPSPanel · Johannes Wiedemann",
+    signedInAs: "Signed in as", account: "ACCOUNT", securityAndHttps: "Security & HTTPS", currentAddress: "Current address",
+    panelDomain: "Domain for your panel", httpsHelp: "The A record must point to this VPS. VPSPanel configures Caddy and the certificate automatically.",
+    enableHttps: "Enable HTTPS", httpsStarted: "HTTPS is being configured", httpsWait: "Caddy obtains the certificate automatically. This usually takes only a few seconds.", openSecure: "Open secure panel", logout: "Sign out", title: "VPSPanel · Johannes Wiedemann",
     stepRepository: "Loading repository", stepDatabase: "Creating database", stepBuild: "Building app",
     stepStart: "Starting app", stepDomain: "Connecting domain and HTTPS", stepCheck: "Checking app",
     stepRollback: "Starting previous version"
@@ -93,6 +98,7 @@ let inspection = null;
 let selectedRepository = null;
 let pollingTimer = null;
 let githubConnected = false;
+let githubConfigured = false;
 
 function t(key) {
   return messages[currentLanguage][key] || messages.de[key] || key;
@@ -392,12 +398,51 @@ async function rollbackProject(projectId) {
   } catch (error) { window.alert(error.message); }
 }
 
+async function openAccountSettings() {
+  const error = $("#settingsError");
+  error.classList.add("hidden");
+  $("#httpsSuccess").classList.add("hidden");
+  $("#httpsForm").classList.remove("hidden");
+  $("#connectGithubButton").classList.toggle("hidden", !githubConfigured || githubConnected);
+  accountDialog.showModal();
+  try {
+    const settings = await api("/api/settings");
+    $("#panelPublicUrl").textContent = settings.publicUrl;
+    if (settings.httpsEnabled) {
+      $("#httpsForm").classList.add("hidden");
+      $("#httpsSuccess").classList.remove("hidden");
+      $("#openSecurePanel").href = settings.publicUrl;
+    }
+  } catch (requestError) {
+    error.textContent = requestError.message;
+    error.classList.remove("hidden");
+  }
+}
+
+async function enableHttps(event) {
+  event.preventDefault();
+  const button = $("#enableHttpsButton");
+  const error = $("#settingsError");
+  error.classList.add("hidden");
+  button.disabled = true;
+  try {
+    const result = await api("/api/settings/domain", { method: "POST", body: JSON.stringify({ domain: $("#panelDomainInput").value }) });
+    $("#panelPublicUrl").textContent = result.publicUrl;
+    $("#httpsForm").classList.add("hidden");
+    $("#httpsSuccess").classList.remove("hidden");
+    $("#openSecurePanel").href = result.publicUrl;
+  } catch (requestError) {
+    error.textContent = requestError.message;
+    error.classList.remove("hidden");
+  } finally { button.disabled = false; }
+}
+
 async function initialize() {
   try {
     const meta = await api("/api/meta");
     applyLanguage(preferredLanguage(meta.language), false);
     $("#version").textContent = "VPSPanel " + meta.version;
-    $("#githubButton").classList.toggle("hidden", !meta.githubConfigured);
+    githubConfigured = Boolean(meta.githubConfigured);
     if (!meta.localLoginConfigured) {
       $("#setupHint").textContent = "Lokale Anmeldung fehlt. Führe den aktuellen Installer erneut aus.";
       $("#setupHint").classList.add("error");
@@ -410,7 +455,8 @@ async function initialize() {
     account.classList.remove("hidden");
     account.title = t("signedInAs") + " " + me.login;
     if (me.avatarUrl) account.style.backgroundImage = "url(" + JSON.stringify(me.avatarUrl) + ")";
-    account.addEventListener("click", async () => { await api("/api/logout", { method: "POST", body: "{}" }); window.location.href = "/"; });
+    else account.textContent = "⚙";
+    account.addEventListener("click", openAccountSettings);
     await loadProjects();
   } catch (error) {
     if (error.status !== 401) console.warn(error);
@@ -443,5 +489,8 @@ $("#repositorySelect").addEventListener("change", () => {
 });
 $("[data-close]").addEventListener("click", () => { window.clearTimeout(pollingTimer); deployDialog.close(); });
 $("[data-close-logs]").addEventListener("click", () => logDialog.close());
+$("#httpsForm").addEventListener("submit", enableHttps);
+$("#logoutButton").addEventListener("click", async () => { await api("/api/logout", { method: "POST", body: "{}" }); window.location.href = "/"; });
+$("[data-close-account]").addEventListener("click", () => accountDialog.close());
 
 await initialize();

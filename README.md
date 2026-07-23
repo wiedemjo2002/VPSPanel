@@ -30,6 +30,12 @@ curl -fsSL https://raw.githubusercontent.com/wiedemjo2002/VPSPanel/main/install.
 
 Der Installer ist idempotent, installiert Docker aus dem offiziellen Docker-Repository, erzeugt starke lokale Secrets und ein lokales Admin-Passwort, öffnet bei aktiver UFW-/firewalld-Firewall die benötigten Ports, startet den Compose-Stack und wartet auf alle Healthchecks. Die Installation liegt standardmäßig unter /opt/vpspanel.
 
+## Anmeldung und HTTPS
+
+Das Dashboard ist direkt nach der Installation durch ein zufällig erzeugtes Admin-Passwort geschützt. Das Passwort wird nur bei der Installation angezeigt und anschließend mit Root-Rechten in `/opt/vpspanel/.env` gespeichert. Unangemeldete Besucher können weder Projekte sehen noch Deployments oder Einstellungen auslösen.
+
+Für HTTPS im Dashboard oben rechts das Zahnrad öffnen, eine Domain eintragen und **HTTPS aktivieren** wählen. Zuvor muss der A-Record (und ein vorhandener AAAA-Record) der Domain auf den VPS zeigen. VPSPanel schreibt die Caddy-Konfiguration; Caddy beschafft und erneuert das öffentliche TLS-Zertifikat automatisch. Die lokale Server-Firewall wird vom Installer für 80, 443 und 8080 vorbereitet. Falls der VPS-Anbieter zusätzlich eine Netzwerk-Firewall besitzt, müssen dort 80 und 443 ebenfalls freigegeben sein.
+
 ## Optionale GitHub-Verbindung
 
 Öffentliche GitHub-Repositories lassen sich ohne OAuth direkt über ihre URL deployen. Eine GitHub OAuth App ist nur für private Repositories, die komfortable Repository-Auswahl und automatische Push-Webhooks erforderlich.

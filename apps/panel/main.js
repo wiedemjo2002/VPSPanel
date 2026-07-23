@@ -3,12 +3,13 @@ import { createHmac, randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
-import { pool, initializeDatabase, currentUser } from "./lib/database.js";
-import { cookie, decrypt, encrypt, parseCookies, randomToken, safeEqual, sign, tokenHash } from "./lib/security.js";
+import { pool, initializeDatabase, currentUser, getSetting, setSetting } from "./lib/database.js";
+import { cookie, decrypt, encrypt, parseCookies, randomToken, safeEqual, setCookieSecurity, sign, tokenHash } from "./lib/security.js";
 import { createPushWebhook, github, inspectRepository, parseGitHubRepository } from "./lib/github.js";
 
 const port = Number(process.env.PORT || 3000);
-const publicUrl = process.env.PANEL_PUBLIC_URL || "http://localhost:8080";
+const initialPublicUrl = process.env.PANEL_PUBLIC_URL || "http://localhost:8080";
+let panelPublicUrl = initialPublicUrl;
 const agentUrl = process.env.AGENT_URL || "http://agent:3100";
 const agentToken = process.env.AGENT_TOKEN || "";
 if (agentToken.length < 32 || agentToken === "change-me") throw new Error("AGENT_TOKEN must contain at least 32 characters");
@@ -59,7 +60,7 @@ function checkWriteOrigin(request) {
   if (!["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) return true;
   if (request.headers["sec-fetch-site"] === "cross-site") return false;
   const origin = request.headers.origin;
-  if (!origin || origin === new URL(publicUrl).origin) return true;
+  if (!origin || origin === new URL(panelPublicUrl).origin) return true;
   const forwardedProtocol = String(request.headers["x-forwarded-proto"] || "http").split(",", 1)[0].trim();
   const host = request.headers.host;
   return ["http", "https"].includes(forwardedProtocol) && Boolean(host) && origin === `${forwardedProtocol}://${host}`;
@@ -168,7 +169,7 @@ async function api(request, response, url) {
     await pool.query("SELECT 1");
     return json(response, 200, { status: "ok", service: "vpspanel", startedAt });
   }
-  if (url.pathname === "/api/meta") return json(response, 200, { publicUrl, localLoginConfigured: adminPassword.length >= 16, githubConfigured: Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET), language: panelLanguage, version: "0.4.0" });
+  if (url.pathname === "/api/meta") return json(response, 200, { publicUrl: panelPublicUrl, localLoginConfigured: adminPassword.length >= 16, githubConfigured: Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET), language: panelLanguage, version: "0.5.0" });
   if (url.pathname === "/api/webhooks/github" && request.method === "POST") return githubWebhook(request, response);
   if (url.pathname === "/api/e2e/session" && request.method === "GET" && process.env.E2E_SESSION_TOKEN) {
     if (!safeEqual(url.searchParams.get("token"), process.env.E2E_SESSION_TOKEN)) return json(response, 404, { error: "Not found" });
@@ -188,21 +189,26 @@ async function api(request, response, url) {
       return json(response, 401, { error: "Admin-Passwort ist nicht korrekt." });
     }
     loginAttempts.count = 0;
-    const userResult = await pool.query(`INSERT INTO users (github_id,login,avatar_url,encrypted_token) VALUES (0,'admin',NULL,$1) ON CONFLICT (github_id) DO UPDATE SET login=EXCLUDED.login RETURNING id`, [encrypt("")]);
+    let userResult = await pool.query("SELECT id FROM users WHERE is_admin=TRUE LIMIT 1");
+    if (!userResult.rowCount) userResult = await pool.query(`INSERT INTO users (github_id,login,avatar_url,encrypted_token,is_admin) VALUES (0,'admin',NULL,$1,TRUE) RETURNING id`, [encrypt("")]);
     return json(response, 200, { ok: true }, { "Set-Cookie": await createSession(userResult.rows[0].id) });
   }
   if (url.pathname === "/api/auth/github" && request.method === "GET") {
+    const linkingUser = await authenticated(request);
+    if (!linkingUser?.is_admin) return redirect(response, "/?error=admin_login_required");
     if (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET) return redirect(response, "/?error=github_not_configured");
     const state = randomToken();
     const target = new URL("https://github.com/login/oauth/authorize");
     target.searchParams.set("client_id", process.env.GITHUB_CLIENT_ID);
-    target.searchParams.set("redirect_uri", `${publicUrl}/api/auth/github/callback`);
+    target.searchParams.set("redirect_uri", `${panelPublicUrl}/api/auth/github/callback`);
     target.searchParams.set("scope", "read:user repo admin:repo_hook");
     target.searchParams.set("state", state);
     return redirect(response, target.toString(), { "Set-Cookie": cookie("vpspanel_oauth", `${state}.${sign(state)}`, { maxAge: 600 }) });
   }
 
   if (url.pathname === "/api/auth/github/callback" && request.method === "GET") {
+    const linkingUser = await authenticated(request);
+    if (!linkingUser?.is_admin) return redirect(response, "/?error=admin_login_required");
     const stateCookie = parseCookies(request).vpspanel_oauth || "";
     const [storedState, signature] = stateCookie.split(".");
     if (!storedState || !safeEqual(signature, sign(storedState)) || storedState !== url.searchParams.get("state")) return redirect(response, "/?error=oauth_state");
@@ -210,22 +216,36 @@ async function api(request, response, url) {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json", "User-Agent": "VPSPanel/0.2" },
       signal: AbortSignal.timeout(15_000),
-      body: JSON.stringify({ client_id: process.env.GITHUB_CLIENT_ID, client_secret: process.env.GITHUB_CLIENT_SECRET, code: url.searchParams.get("code"), redirect_uri: `${publicUrl}/api/auth/github/callback` }),
+      body: JSON.stringify({ client_id: process.env.GITHUB_CLIENT_ID, client_secret: process.env.GITHUB_CLIENT_SECRET, code: url.searchParams.get("code"), redirect_uri: `${panelPublicUrl}/api/auth/github/callback` }),
     });
     const tokenData = await tokenResponse.json();
     if (!tokenData.access_token) return redirect(response, "/?error=oauth_token");
     const profile = await github("/user", tokenData.access_token);
-    const userResult = await pool.query(`INSERT INTO users (github_id,login,avatar_url,encrypted_token) VALUES ($1,$2,$3,$4) ON CONFLICT (github_id) DO UPDATE SET login=EXCLUDED.login,avatar_url=EXCLUDED.avatar_url,encrypted_token=EXCLUDED.encrypted_token RETURNING id`, [profile.id, profile.login, profile.avatar_url, encrypt(tokenData.access_token)]);
-    const sessionToken = randomToken(32);
-    await pool.query("DELETE FROM sessions WHERE expires_at<=NOW()");
-    await pool.query("INSERT INTO sessions (token_hash,user_id,expires_at) VALUES ($1,$2,NOW()+INTERVAL '30 days')", [tokenHash(sessionToken), userResult.rows[0].id]);
-    return redirect(response, "/app", { "Set-Cookie": [cookie("vpspanel_session", sessionToken, { maxAge: 2_592_000 }), cookie("vpspanel_oauth", "", { maxAge: 0 })] });
+    const existing = await pool.query("SELECT id FROM users WHERE github_id=$1 AND id<>$2 LIMIT 1", [profile.id, linkingUser.id]);
+    if (existing.rowCount) return redirect(response, "/app?error=github_account_in_use");
+    await pool.query("UPDATE users SET github_id=$1,login=$2,avatar_url=$3,encrypted_token=$4 WHERE id=$5 AND is_admin=TRUE", [profile.id, profile.login, profile.avatar_url, encrypt(tokenData.access_token), linkingUser.id]);
+    return redirect(response, "/app", { "Set-Cookie": cookie("vpspanel_oauth", "", { maxAge: 0 }) });
   }
 
   const user = await authenticated(request);
-  if (!user) return json(response, 401, { error: "Bitte zuerst am Panel anmelden." });
+  if (!user?.is_admin) return json(response, 401, { error: "Bitte zuerst als Administrator am Panel anmelden." });
   const githubToken = decrypt(user.encrypted_token);
 
+  if (url.pathname === "/api/settings" && request.method === "GET") {
+    return json(response, 200, { publicUrl: panelPublicUrl, httpsEnabled: panelPublicUrl.startsWith("https://") });
+  }
+  if (url.pathname === "/api/settings/domain" && request.method === "POST") {
+    const input = await body(request, 4096);
+    const domain = String(input.domain || "").trim().toLowerCase();
+    if (!validDomain(domain)) return json(response, 400, { error: "Bitte gib eine gültige Domain ein." });
+    const conflict = await pool.query("SELECT 1 FROM projects WHERE lower(domain)=lower($1) LIMIT 1", [domain]);
+    if (conflict.rowCount) return json(response, 409, { error: "Diese Domain wird bereits von einem Projekt verwendet." });
+    const configured = await agent("/actions/panel-domain", { method: "POST", body: JSON.stringify({ domain }) });
+    await setSetting("panel_public_url", configured.publicUrl);
+    panelPublicUrl = configured.publicUrl;
+    setCookieSecurity(true);
+    return json(response, 200, { publicUrl: panelPublicUrl, httpsEnabled: true });
+  }
   if (url.pathname === "/api/me" && request.method === "GET") return json(response, 200, { login: user.login, avatarUrl: user.avatar_url, githubConnected: Number(user.github_id) > 0 && Boolean(githubToken) });
   if (url.pathname === "/api/logout" && request.method === "POST") {
     const sessionToken = parseCookies(request).vpspanel_session;
@@ -291,7 +311,7 @@ async function api(request, response, url) {
     let webhookWarning = null;
     if (autoDeploy) {
       try {
-        await createPushWebhook({ owner: input.owner, repo: input.repo, callbackUrl: `${publicUrl}/api/webhooks/github`, secret: webhookSecret }, githubToken);
+        await createPushWebhook({ owner: input.owner, repo: input.repo, callbackUrl: `${panelPublicUrl}/api/webhooks/github`, secret: webhookSecret }, githubToken);
       } catch {
         webhookWarning = "Das erste Deployment l?uft, aber der GitHub-Push-Webhook konnte nicht eingerichtet werden. Pr?fe die Admin-Berechtigung f?r das Repository.";
         config.autoDeploy = false;
@@ -349,4 +369,6 @@ server.keepAliveTimeout = 5_000;
 server.maxHeadersCount = 100;
 
 await initializeDatabase();
+panelPublicUrl = (await getSetting("panel_public_url")) || initialPublicUrl;
+setCookieSecurity(panelPublicUrl.startsWith("https://"));
 server.listen(port, "0.0.0.0", () => console.log(`VPSPanel listening on :${port}`));

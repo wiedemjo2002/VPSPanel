@@ -8,7 +8,13 @@ export async function initializeDatabase() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id BIGSERIAL PRIMARY KEY, github_id BIGINT UNIQUE NOT NULL, login TEXT NOT NULL,
-      avatar_url TEXT, encrypted_token TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      avatar_url TEXT, encrypted_token TEXT NOT NULL, is_admin BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE;
+    UPDATE users SET is_admin=TRUE WHERE github_id=0;
+    CREATE UNIQUE INDEX IF NOT EXISTS users_single_admin ON users ((is_admin)) WHERE is_admin=TRUE;
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE TABLE IF NOT EXISTS sessions (
       token_hash TEXT PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -36,4 +42,12 @@ export async function currentUser(request, sessionToken) {
   if (!sessionToken) return null;
   const result = await pool.query(`SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>NOW()`, [tokenHash(sessionToken)]);
   return result.rows[0] || null;
+}
+export async function getSetting(key) {
+  const result = await pool.query("SELECT value FROM settings WHERE key=$1", [key]);
+  return result.rows[0]?.value || null;
+}
+
+export async function setSetting(key, value) {
+  await pool.query("INSERT INTO settings (key,value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value,updated_at=NOW()", [key, value]);
 }

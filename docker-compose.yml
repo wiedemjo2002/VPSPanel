@@ -73,6 +73,7 @@ services:
     environment:
       PORT: 3100
       AGENT_TOKEN: ${AGENT_TOKEN}
+      PANEL_SITE_ADDRESS: ${PANEL_SITE_ADDRESS:-:8080}
       DOCKER_CONFIG: /tmp/docker
       PROJECTS_ROOT: /data/projects
       EDGE_NETWORK: vpspanel_edge

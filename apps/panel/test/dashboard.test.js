@@ -11,12 +11,14 @@ test("keeps redeploy and rollback as separate top-level UI actions", () => {
 });
 
 test("cache-busts dashboard assets for immediate updates", () => {
-  assert.match(html, /dashboard\.css\?v=0\.4\.0/);
-  assert.match(html, /dashboard\.js\?v=0\.4\.0/);
+  assert.match(html, /dashboard\.css\?v=0\.5\.0/);
+  assert.match(html, /dashboard\.js\?v=0\.5\.0/);
 });
 test("offers password login and public repository quick deploy", () => {
   assert.match(html, /id="adminLoginForm"/);
   assert.match(html, /id="repositoryUrlInput"/);
+  assert.match(html, /id="accountDialog"/);
+  assert.match(dashboard, /"\/api\/settings\/domain"/);
   assert.match(dashboard, /repositoryUrl \? \{ repositoryUrl, branch \}/);
   assert.match(dashboard, /githubConnected = Boolean\(me\.githubConnected\)/);
 });

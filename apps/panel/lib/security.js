@@ -8,6 +8,7 @@ if (!["http:", "https:"].includes(parsedPublicUrl.protocol) || parsedPublicUrl.u
 const sessionSecret = process.env.SESSION_SECRET;
 if (!sessionSecret || sessionSecret.length < 32 || sessionSecret === "change-me") throw new Error("SESSION_SECRET must contain at least 32 characters");
 const key = createHash("sha256").update(sessionSecret).digest();
+let secureCookies = publicUrl.startsWith("https://");
 
 export function encrypt(value) {
   const iv = randomBytes(12);
@@ -46,10 +47,12 @@ export function parseCookies(request) {
   return result;
 }
 
+export function setCookieSecurity(secure) { secureCookies = Boolean(secure); }
+
 export function cookie(name, value, options = {}) {
   const parts = [`${name}=${encodeURIComponent(value)}`, "Path=/", `SameSite=${options.sameSite || "Lax"}`];
   if (options.httpOnly !== false) parts.push("HttpOnly");
-  if (publicUrl.startsWith("https://")) parts.push("Secure");
+  if (secureCookies) parts.push("Secure");
   if (options.maxAge !== undefined) parts.push(`Max-Age=${options.maxAge}`);
   return parts.join("; ");
 }

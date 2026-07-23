@@ -7,6 +7,8 @@ const dataRoot = process.env.PROJECTS_ROOT || "/data/projects";
 const edgeNetwork = process.env.EDGE_NETWORK || "vpspanel_edge";
 const caddyConfigPath = process.env.CADDY_CONFIG_PATH || "/caddy/Caddyfile";
 const caddyRegistryPath = process.env.CADDY_REGISTRY_PATH || join(dirname(caddyConfigPath), "caddy-projects.json");
+const panelAddressPath = process.env.PANEL_ADDRESS_PATH || join(dirname(caddyConfigPath), "panel-address");
+const defaultPanelAddress = process.env.PANEL_SITE_ADDRESS || ":8080";
 const caddyContainer = process.env.CADDY_CONTAINER || "vpspanel-caddy-1";
 
 const appName = (id) => `vpspanel-app-${id}`;
@@ -14,7 +16,7 @@ const dbName = (id) => `vpspanel-db-${id}`;
 const internalNetwork = (id) => `vpspanel-internal-${id}`;
 const imageName = (projectId, deploymentId) => `vpspanel-project-${projectId}:${deploymentId}`;
 const maxSourceBytes = 250 * 1024 * 1024;
-const panelRoute = `{$PANEL_SITE_ADDRESS::8080} {
+const panelRoute = (address) => `${address} {
 \tencode zstd gzip
 \treverse_proxy panel:3000
 \theader {
@@ -41,16 +43,25 @@ async function limitedResponseBuffer(response, limit = maxSourceBytes) {
   return Buffer.concat(chunks);
 }
 
-function renderCaddy(registry) {
+function renderCaddy(registry, panelAddress) {
   const routes = Object.values(registry).map((route) => `${route.domain} {\n\tencode zstd gzip\n\treverse_proxy ${route.target}:${route.port}\n\theader {\n\t\tStrict-Transport-Security "max-age=31536000"\n\t\tX-Content-Type-Options nosniff\n\t\tReferrer-Policy strict-origin-when-cross-origin\n\t\tPermissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"\n\t\t-Server\n\t}\n}`).join("\n\n");
-  return `{\n\tadmin localhost:2019\n}\n\n${panelRoute}${routes ? `\n\n${routes}` : ""}\n`;
+  return `{\n\tadmin localhost:2019\n}\n\n${panelRoute(panelAddress)}${routes ? `\n\n${routes}` : ""}\n`;
+}
+
+async function readPanelAddress() {
+  try { return (await readFile(panelAddressPath, "utf8")).trim() || defaultPanelAddress; }
+  catch { return defaultPanelAddress; }
+}
+
+async function writeCaddy(registry) {
+  await writeFile(caddyConfigPath, renderCaddy(registry, await readPanelAddress()));
 }
 
 export async function initializeRuntime() {
   await mkdir(dirname(caddyConfigPath), { recursive: true });
   const registry = await readRegistry();
   await writeFile(caddyRegistryPath, JSON.stringify(registry, null, 2), { mode: 0o600 });
-  await writeFile(caddyConfigPath, renderCaddy(registry));
+  await writeCaddy(registry);
   await command("docker", ["exec", caddyContainer, "caddy", "reload", "--config", "/runtime/Caddyfile", "--adapter", "caddyfile"]).catch(() => {});
 }
 export async function persist(job) {
@@ -173,8 +184,15 @@ async function configureCaddy(input) {
   const registry = await readRegistry();
   registry[input.projectId] = { domain: input.domain, target: appName(input.projectId), port: input.port };
   await writeFile(caddyRegistryPath, JSON.stringify(registry, null, 2), { mode: 0o600 });
-  await writeFile(caddyConfigPath, renderCaddy(registry));
+  await writeCaddy(registry);
   await command("docker", ["exec", caddyContainer, "caddy", "reload", "--config", "/runtime/Caddyfile", "--adapter", "caddyfile"]);
+}
+
+export async function configurePanelDomain(domain) {
+  await writeFile(panelAddressPath, `${domain}\n`, { mode: 0o600 });
+  await writeCaddy(await readRegistry());
+  await command("docker", ["exec", caddyContainer, "caddy", "reload", "--config", "/runtime/Caddyfile", "--adapter", "caddyfile"]);
+  return { domain, publicUrl: `https://${domain}` };
 }
 
 export async function deploy(input, job) {
@@ -240,4 +258,4 @@ export async function projectLogs(projectId) {
   catch (error) { return error.message; }
 }
 
-export { dataRoot };
+export { dataRoot, renderCaddy };
