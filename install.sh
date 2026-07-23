@@ -149,6 +149,7 @@ if [[ ! -f .env ]]; then
   DB_PASSWORD="$(openssl rand -hex 24)"
   SESSION_SECRET="$(openssl rand -hex 32)"
   AGENT_TOKEN="$(openssl rand -hex 32)"
+  ADMIN_PASSWORD="$(openssl rand -hex 12)"
   if [[ -n "$PANEL_DOMAIN" ]]; then
     SITE_ADDRESS="$PANEL_DOMAIN"
     PUBLIC_URL="https://$PANEL_DOMAIN"
@@ -168,6 +169,7 @@ POSTGRES_USER=vpspanel
 POSTGRES_PASSWORD=$DB_PASSWORD
 SESSION_SECRET=$SESSION_SECRET
 AGENT_TOKEN=$AGENT_TOKEN
+PANEL_ADMIN_PASSWORD=$ADMIN_PASSWORD
 GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
 EOF
@@ -185,6 +187,15 @@ if grep -q '^VPSPANEL_VERSION=' .env; then
   sed -i "s/^VPSPANEL_VERSION=.*/VPSPANEL_VERSION=$PANEL_VERSION/" .env
 else
   printf 'VPSPANEL_VERSION=%s\n' "$PANEL_VERSION" >> .env
+fi
+ADMIN_PASSWORD="$(grep '^PANEL_ADMIN_PASSWORD=' .env 2>/dev/null | tail -n1 | cut -d= -f2- || true)"
+if [[ ${#ADMIN_PASSWORD} -lt 16 || "$ADMIN_PASSWORD" == "change-me" ]]; then
+  ADMIN_PASSWORD="$(openssl rand -hex 12)"
+  if grep -q '^PANEL_ADMIN_PASSWORD=' .env; then
+    sed -i "s/^PANEL_ADMIN_PASSWORD=.*/PANEL_ADMIN_PASSWORD=$ADMIN_PASSWORD/" .env
+  else
+    printf 'PANEL_ADMIN_PASSWORD=%s\n' "$ADMIN_PASSWORD" >> .env
+  fi
 fi
 chmod 0600 .env
 
@@ -205,4 +216,5 @@ ok "$(say "Panel wurde gestartet" "Panel started")"
 ok "$(say "PostgreSQL ist bereit" "PostgreSQL is healthy")"
 ok "$(say "Caddy ist bereit" "Caddy is ready")"
 printf '\n\033[1m%s\033[0m\n%s\n\n' "$(say "VPSPanel ist bereit:" "VPSPanel is ready:")" "$(grep '^PANEL_PUBLIC_URL=' .env | cut -d= -f2-)"
-printf '%s\n' "$(say "Nächster Schritt: Adresse öffnen und GitHub verbinden." "Next step: open the address and connect GitHub.")"
+printf '%s\n' "$(say "Admin-Passwort: $ADMIN_PASSWORD" "Admin password: $ADMIN_PASSWORD")"
+printf '%s\n' "$(say "Nächster Schritt: Adresse öffnen, anmelden und eine öffentliche GitHub-URL einfügen." "Next step: open the address, sign in, and paste a public GitHub URL.")"

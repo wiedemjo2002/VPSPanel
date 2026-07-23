@@ -20,3 +20,8 @@ footer { min-height:72px;border-top:1px solid var(--line);color:#647089;font-siz
 @media (max-width:460px) { .brand-copy small { display:none; }.language-switch button { min-width:30px;padding:6px; } }
 @keyframes pulse { 50% { opacity:.4;transform:scale(.8); } }
 @media (max-width:720px) { .topbar,footer { width:calc(100% - 30px); }.server-badge { display:none; }.landing { padding-top:58px; }.flow { grid-template-columns:1fr;margin-top:65px; }.connector { width:1px;height:30px;margin:auto;background:linear-gradient(transparent,#33405c,transparent); }.dashboard-heading { align-items:flex-start;gap:20px; }.dashboard-heading h1 { font-size:36px; }.project-grid { grid-template-columns:1fr; }.detected-grid,.advanced { grid-template-columns:1fr; } }
+.login-card { width:min(360px,100%);margin:28px auto 0;padding:18px;background:rgba(14,21,38,.9);border:1px solid var(--line);border-radius:16px;text-align:left; }
+.login-card .field { margin-bottom:12px; }
+.login-card .hero-button { width:100%;min-width:0; }
+.github-option { display:inline-block;margin-top:16px;color:#98a7c2;font-size:13px;text-decoration:none; }
+.github-option:hover { color:var(--accent); }

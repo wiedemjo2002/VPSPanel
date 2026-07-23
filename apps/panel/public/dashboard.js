@@ -11,15 +11,16 @@ const messages = {
   de: {
     brandBy: "von Johannes Wiedemann", serverReady: "Server bereit", heroEyebrow: "DEIN SERVER. OHNE SERVERKRAM.",
     heroTitle: "Was möchtest du<br /><span>online bringen?</span>",
-    heroIntro: "Verbinde dein GitHub-Repository. Domain, HTTPS, Datenbank und Deployment übernehmen wir.",
-    startGithub: "Mit GitHub starten", heroHint: "Keine Docker-Kenntnisse nötig. Keine Kreditkarte.",
+    heroIntro: "Öffentliche GitHub-URL einfügen und deployen. Ohne OAuth, ohne Serverkram.",
+    startGithub: "Mit GitHub starten", heroHint: "Das Admin-Passwort wurde bei der Installation angezeigt.",
+    adminPassword: "Admin-Passwort", openPanel: "Panel öffnen", optionalGithub: "Optional mit GitHub anmelden",
     flowAria: "Deployment-Ablauf", repository: "Repository", flowRepo: "Wähle dein Projekt aus.",
     domain: "Domain", flowDomain: "Sag uns, wo es laufen soll.", online: "Online", flowOnline: "Wir erledigen den Rest.",
     projects: "PROJEKTE", yourApps: "Deine Apps", overview: "Alles Wichtige auf einen Blick.",
     deployApp: "+ App deployen", firstApp: "Deine erste App wartet",
     emptyIntro: "Wähle ein Repository aus. Den Serverkram übernehmen wir.", deployAppShort: "App deployen",
     newProject: "NEUES PROJEKT", selectRepository: "Repository auswählen", close: "Schließen",
-    githubRepository: "GitHub-Repository", loadingRepository: "Repository wird geladen …",
+    githubRepository: "GitHub-Repository", repositoryUrl: "Öffentliche GitHub-URL", connectedRepository: "Oder verbundenes Repository", loadingRepository: "Repository wird geladen …",
     analyzeProject: "Projekt analysieren", createPostgres: "PostgreSQL automatisch erstellen",
     databaseHint: "Sicheres Passwort und DATABASE_URL inklusive", deployEveryPush: "Bei jedem Push neu deployen",
     webhookHint: "VPSPanel richtet den GitHub-Webhook automatisch ein", advancedSettings: "Erweiterte Einstellungen",
@@ -33,7 +34,7 @@ const messages = {
     automatic: "Automatisch", detectedTitle: "Wir haben Folgendes erkannt", type: "Typ", port: "Port",
     build: "Build", start: "Start", packageManager: "Paketmanager", migration: "Migration",
     visibility: "Sichtbarkeit", privateLabel: "Privat", publicLabel: "Öffentlich", requiredValue: "Erforderlicher Wert",
-    reviewDeployment: "Deployment prüfen", selectRepoError: "Bitte wähle ein Repository aus.",
+    reviewDeployment: "Deployment prüfen", selectRepoError: "Bitte gib eine öffentliche GitHub-URL ein oder wähle ein verbundenes Repository.",
     analyzing: "Projekt wird analysiert …", appOnline: "Deine App ist online", deployFailed: "Deployment fehlgeschlagen",
     previousKeepsRunning: "Die vorherige Version läuft weiterhin, falls bereits eine vorhanden war.",
     openLogsHint: "Öffne die Logs für die genaue Ursache.", domainRequired: "Bitte gib die Domain deiner App ein.",
@@ -48,15 +49,16 @@ const messages = {
   en: {
     brandBy: "by Johannes Wiedemann", serverReady: "Server ready", heroEyebrow: "YOUR SERVER. WITHOUT THE SERVER WORK.",
     heroTitle: "What do you want to<br /><span>put online?</span>",
-    heroIntro: "Connect your GitHub repository. We handle the domain, HTTPS, database and deployment.",
-    startGithub: "Start with GitHub", heroHint: "No Docker knowledge required. No credit card.",
+    heroIntro: "Paste a public GitHub URL and deploy. No OAuth, no server work.",
+    startGithub: "Start with GitHub", heroHint: "The admin password was shown during installation.",
+    adminPassword: "Admin password", openPanel: "Open panel", optionalGithub: "Optionally sign in with GitHub",
     flowAria: "Deployment flow", repository: "Repository", flowRepo: "Choose your project.",
     domain: "Domain", flowDomain: "Tell us where it should run.", online: "Online", flowOnline: "We handle the rest.",
     projects: "PROJECTS", yourApps: "Your apps", overview: "Everything important at a glance.",
     deployApp: "+ Deploy app", firstApp: "Your first app is waiting",
     emptyIntro: "Choose a repository. We handle the server work.", deployAppShort: "Deploy app",
     newProject: "NEW PROJECT", selectRepository: "Select repository", close: "Close",
-    githubRepository: "GitHub repository", loadingRepository: "Loading repositories …",
+    githubRepository: "GitHub repository", repositoryUrl: "Public GitHub URL", connectedRepository: "Or connected repository", loadingRepository: "Loading repositories …",
     analyzeProject: "Analyze project", createPostgres: "Create PostgreSQL automatically",
     databaseHint: "Secure password and DATABASE_URL included", deployEveryPush: "Deploy on every push",
     webhookHint: "VPSPanel configures the GitHub webhook automatically", advancedSettings: "Advanced settings",
@@ -70,7 +72,7 @@ const messages = {
     automatic: "Automatic", detectedTitle: "Here is what we detected", type: "Type", port: "Port",
     build: "Build", start: "Start", packageManager: "Package manager", migration: "Migration",
     visibility: "Visibility", privateLabel: "Private", publicLabel: "Public", requiredValue: "Required value",
-    reviewDeployment: "Review deployment", selectRepoError: "Please select a repository.",
+    reviewDeployment: "Review deployment", selectRepoError: "Enter a public GitHub URL or choose a connected repository.",
     analyzing: "Analyzing project …", appOnline: "Your app is online", deployFailed: "Deployment failed",
     previousKeepsRunning: "The previous version remains online if one already exists.",
     openLogsHint: "Open the logs to see the exact cause.", domainRequired: "Please enter your app domain.",
@@ -90,6 +92,7 @@ let currentProjects = [];
 let inspection = null;
 let selectedRepository = null;
 let pollingTimer = null;
+let githubConnected = false;
 
 function t(key) {
   return messages[currentLanguage][key] || messages.de[key] || key;
@@ -215,17 +218,22 @@ function resetDialog() {
   $("#progressStep").classList.add("hidden");
   $("#dialogTitle").textContent = t("selectRepository");
   $("#repositorySelect").value = "";
-  $("#branchInput").value = "main";
+  $("#repositoryUrlInput").value = "";
+  $("#branchInput").value = "";
   $("#domainInput").value = "";
   $("#databaseInput").checked = false;
-  $("#autoDeployInput").checked = true;
+  $("#autoDeployInput").checked = githubConnected;
+  $("#autoDeployRow").classList.toggle("hidden", !githubConnected);
   $("#environmentFields").replaceChildren();
 }
 
 async function openDeploy() {
   resetDialog();
   deployDialog.showModal();
-  try { await loadRepositories(); } catch (error) { showError(error.message); }
+  $("#connectedRepositoryField").classList.toggle("hidden", !githubConnected);
+  if (githubConnected) {
+    try { await loadRepositories(); } catch (error) { showError(error.message); }
+  }
 }
 
 function summaryLine(label, value) {
@@ -261,15 +269,18 @@ function showInspection(result) {
 
 async function inspectSelected() {
   clearError();
+  const repositoryUrl = $("#repositoryUrlInput").value.trim();
   const index = $("#repositorySelect").value;
-  if (index === "") return showError(t("selectRepoError"));
-  selectedRepository = repositories[Number(index)];
-  const branch = $("#branchInput").value.trim() || selectedRepository.defaultBranch;
+  const connected = index === "" ? null : repositories[Number(index)];
+  if (!repositoryUrl && !connected) return showError(t("selectRepoError"));
+  const branch = $("#branchInput").value.trim() || connected?.defaultBranch || "";
+  const request = repositoryUrl ? { repositoryUrl, branch } : { owner: connected.owner, repo: connected.name, branch };
   const button = $("#inspectButton");
   button.disabled = true;
   button.textContent = t("analyzing");
   try {
-    inspection = await api("/api/inspect", { method: "POST", body: JSON.stringify({ owner: selectedRepository.owner, repo: selectedRepository.name, branch }) });
+    inspection = await api("/api/inspect", { method: "POST", body: JSON.stringify(request) });
+    selectedRepository = { owner: inspection.owner, name: inspection.repo };
     showInspection(inspection);
   } catch (error) { showError(error.message); }
   finally { button.disabled = false; button.innerHTML = "<span>" + t("analyzeProject") + "</span><span>→</span>"; }
@@ -386,14 +397,13 @@ async function initialize() {
     const meta = await api("/api/meta");
     applyLanguage(preferredLanguage(meta.language), false);
     $("#version").textContent = "VPSPanel " + meta.version;
-    if (!meta.githubConfigured) {
-      $("#githubButton").addEventListener("click", (event) => {
-        event.preventDefault();
-        $("#setupHint").textContent = t("githubNotConfigured");
-        $("#setupHint").classList.add("error");
-      });
+    $("#githubButton").classList.toggle("hidden", !meta.githubConfigured);
+    if (!meta.localLoginConfigured) {
+      $("#setupHint").textContent = "Lokale Anmeldung fehlt. Führe den aktuellen Installer erneut aus.";
+      $("#setupHint").classList.add("error");
     }
     const me = await api("/api/me");
+    githubConnected = Boolean(me.githubConnected);
     landing.classList.add("hidden");
     dashboard.classList.remove("hidden");
     const account = $("#accountButton");
@@ -407,6 +417,19 @@ async function initialize() {
   }
 }
 
+$("#adminLoginForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const hint = $("#setupHint");
+  hint.classList.remove("error");
+  try {
+    await api("/api/auth/local", { method: "POST", body: JSON.stringify({ password: $("#adminPasswordInput").value }) });
+    window.location.reload();
+  } catch (error) {
+    hint.textContent = error.message;
+    hint.classList.add("error");
+  }
+});
+
 document.querySelectorAll("[data-language]").forEach((button) => {
   button.addEventListener("click", () => applyLanguage(button.dataset.language, true));
 });
@@ -416,7 +439,7 @@ $("#inspectButton").addEventListener("click", inspectSelected);
 $("#deploySubmitButton").addEventListener("click", deployProject);
 $("#repositorySelect").addEventListener("change", () => {
   const repo = repositories[Number($("#repositorySelect").value)];
-  if (repo) $("#branchInput").value = repo.defaultBranch;
+  if (repo) { $("#branchInput").value = repo.defaultBranch; $("#repositoryUrlInput").value = ""; }
 });
 $("[data-close]").addEventListener("click", () => { window.clearTimeout(pollingTimer); deployDialog.close(); });
 $("[data-close-logs]").addEventListener("click", () => logDialog.close());

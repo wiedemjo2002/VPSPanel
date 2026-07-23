@@ -5,7 +5,7 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { pool, initializeDatabase, currentUser } from "./lib/database.js";
 import { cookie, decrypt, encrypt, parseCookies, randomToken, safeEqual, sign, tokenHash } from "./lib/security.js";
-import { createPushWebhook, github, inspectRepository } from "./lib/github.js";
+import { createPushWebhook, github, inspectRepository, parseGitHubRepository } from "./lib/github.js";
 
 const port = Number(process.env.PORT || 3000);
 const publicUrl = process.env.PANEL_PUBLIC_URL || "http://localhost:8080";
@@ -13,6 +13,8 @@ const agentUrl = process.env.AGENT_URL || "http://agent:3100";
 const agentToken = process.env.AGENT_TOKEN || "";
 if (agentToken.length < 32 || agentToken === "change-me") throw new Error("AGENT_TOKEN must contain at least 32 characters");
 const panelLanguage = ["de", "en"].includes(process.env.PANEL_LANGUAGE) ? process.env.PANEL_LANGUAGE : "de";
+const adminPassword = process.env.PANEL_ADMIN_PASSWORD || "";
+const loginAttempts = { count: 0, resetAt: 0 };
 const publicDirectory = fileURLToPath(new URL("./public", import.meta.url));
 const startedAt = new Date().toISOString();
 const types = { ".css": "text/css; charset=utf-8", ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".svg": "image/svg+xml" };
@@ -98,6 +100,13 @@ async function authenticated(request) {
   return currentUser(request, session);
 }
 
+async function createSession(userId, maxAge = 2_592_000) {
+  const sessionToken = randomToken(32);
+  await pool.query("DELETE FROM sessions WHERE expires_at<=NOW()");
+  await pool.query("INSERT INTO sessions (token_hash,user_id,expires_at) VALUES ($1,$2,NOW()+($3 * INTERVAL '1 second'))", [tokenHash(sessionToken), userId, maxAge]);
+  return cookie("vpspanel_session", sessionToken, { maxAge });
+}
+
 async function syncDeployment(project) {
   if (!project.current_deployment || !["queued", "deploying"].includes(project.status)) return null;
   try {
@@ -159,7 +168,7 @@ async function api(request, response, url) {
     await pool.query("SELECT 1");
     return json(response, 200, { status: "ok", service: "vpspanel", startedAt });
   }
-  if (url.pathname === "/api/meta") return json(response, 200, { publicUrl, githubConfigured: Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET), language: panelLanguage, version: "0.3.0" });
+  if (url.pathname === "/api/meta") return json(response, 200, { publicUrl, localLoginConfigured: adminPassword.length >= 16, githubConfigured: Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET), language: panelLanguage, version: "0.4.0" });
   if (url.pathname === "/api/webhooks/github" && request.method === "POST") return githubWebhook(request, response);
   if (url.pathname === "/api/e2e/session" && request.method === "GET" && process.env.E2E_SESSION_TOKEN) {
     if (!safeEqual(url.searchParams.get("token"), process.env.E2E_SESSION_TOKEN)) return json(response, 404, { error: "Not found" });
@@ -167,6 +176,20 @@ async function api(request, response, url) {
     const sessionToken = randomToken(32);
     await pool.query("INSERT INTO sessions (token_hash,user_id,expires_at) VALUES ($1,$2,NOW()+INTERVAL '1 hour')", [tokenHash(sessionToken), userResult.rows[0].id]);
     return redirect(response, "/app", { "Set-Cookie": cookie("vpspanel_session", sessionToken, { maxAge: 3600 }) });
+  }
+  if (url.pathname === "/api/auth/local" && request.method === "POST") {
+    if (adminPassword.length < 16) return json(response, 503, { error: "Lokale Anmeldung ist noch nicht eingerichtet." });
+    const now = Date.now();
+    if (loginAttempts.resetAt <= now) Object.assign(loginAttempts, { count: 0, resetAt: now + 15 * 60_000 });
+    if (loginAttempts.count >= 10) return json(response, 429, { error: "Zu viele Anmeldeversuche. Bitte warte 15 Minuten." });
+    const input = await body(request, 4096);
+    if (typeof input.password !== "string" || !safeEqual(tokenHash(input.password), tokenHash(adminPassword))) {
+      loginAttempts.count += 1;
+      return json(response, 401, { error: "Admin-Passwort ist nicht korrekt." });
+    }
+    loginAttempts.count = 0;
+    const userResult = await pool.query(`INSERT INTO users (github_id,login,avatar_url,encrypted_token) VALUES (0,'admin',NULL,$1) ON CONFLICT (github_id) DO UPDATE SET login=EXCLUDED.login RETURNING id`, [encrypt("")]);
+    return json(response, 200, { ok: true }, { "Set-Cookie": await createSession(userResult.rows[0].id) });
   }
   if (url.pathname === "/api/auth/github" && request.method === "GET") {
     if (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET) return redirect(response, "/?error=github_not_configured");
@@ -200,23 +223,25 @@ async function api(request, response, url) {
   }
 
   const user = await authenticated(request);
-  if (!user) return json(response, 401, { error: "Bitte zuerst mit GitHub anmelden." });
+  if (!user) return json(response, 401, { error: "Bitte zuerst am Panel anmelden." });
   const githubToken = decrypt(user.encrypted_token);
 
-  if (url.pathname === "/api/me" && request.method === "GET") return json(response, 200, { login: user.login, avatarUrl: user.avatar_url });
+  if (url.pathname === "/api/me" && request.method === "GET") return json(response, 200, { login: user.login, avatarUrl: user.avatar_url, githubConnected: Number(user.github_id) > 0 && Boolean(githubToken) });
   if (url.pathname === "/api/logout" && request.method === "POST") {
     const sessionToken = parseCookies(request).vpspanel_session;
     if (sessionToken) await pool.query("DELETE FROM sessions WHERE token_hash=$1", [tokenHash(sessionToken)]);
     return json(response, 200, { ok: true }, { "Set-Cookie": cookie("vpspanel_session", "", { maxAge: 0 }) });
   }
   if (url.pathname === "/api/github/repos" && request.method === "GET") {
+    if (!githubToken) return json(response, 409, { error: "GitHub ist für dieses Konto nicht verbunden." });
     const repos = await github("/user/repos?sort=updated&per_page=100&affiliation=owner,collaborator,organization_member", githubToken);
     return json(response, 200, repos.map((repo) => ({ owner: repo.owner.login, name: repo.name, fullName: repo.full_name, private: repo.private, defaultBranch: repo.default_branch, updatedAt: repo.updated_at })));
   }
   if (url.pathname === "/api/inspect" && request.method === "POST") {
     const input = await body(request);
-    if (!validRepoPart(input.owner) || !validRepoPart(input.repo) || !validBranch(input.branch)) return json(response, 400, { error: "Ungültiges Repository." });
-    return json(response, 200, await inspectRepository(input, githubToken));
+    const parsed = input.repositoryUrl ? parseGitHubRepository(input.repositoryUrl) : { owner: input.owner, repo: input.repo };
+    if (!parsed || !validRepoPart(parsed.owner) || !validRepoPart(parsed.repo) || (input.branch && !validBranch(input.branch))) return json(response, 400, { error: "Bitte gib eine gültige öffentliche GitHub-Repository-URL ein." });
+    return json(response, 200, await inspectRepository({ ...parsed, branch: input.branch }, githubToken));
   }
   if (url.pathname === "/api/projects" && request.method === "GET") {
     const result = await pool.query("SELECT id,name,domain,framework,status,current_deployment,created_at,updated_at FROM projects WHERE user_id=$1 ORDER BY created_at DESC", [user.id]);
@@ -240,7 +265,7 @@ async function api(request, response, url) {
       const password = newId(24);
       environment.DATABASE_URL = `postgresql://app:${password}@vpspanel-db-${projectId}:5432/app`;
     }
-    const autoDeploy = input.autoDeploy !== false;
+    const autoDeploy = Boolean(githubToken) && input.autoDeploy !== false;
     const webhookSecret = autoDeploy ? randomToken(32) : null;
     const config = { database, buildCommand: inspection.buildCommand, startCommand: inspection.startCommand, migrationCommand: inspection.migrationCommand, packageManager: inspection.packageManager, autoDeploy, webhookSecret: webhookSecret ? encrypt(webhookSecret) : null };
     const client = await pool.connect();

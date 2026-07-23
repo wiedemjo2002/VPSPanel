@@ -2,7 +2,7 @@
 
 VPSPanel macht aus einem frischen Ubuntu- oder Debian-VPS eine kleine Self-Hosting-Plattform:
 
-> GitHub-Repository wählen, Domain eintragen, online.
+> Öffentliche GitHub-URL einfügen, Domain eintragen, online.
 
 Der Installer richtet Docker Engine, Docker Compose, Caddy, PostgreSQL, das Panel und den Deployment-Agenten automatisch ein.
 
@@ -28,12 +28,14 @@ Wenn panel.example.com bereits auf den Server zeigt:
 curl -fsSL https://raw.githubusercontent.com/wiedemjo2002/VPSPanel/main/install.sh | sudo bash -s -- --domain panel.example.com
 ~~~
 
-Der Installer ist idempotent, installiert Docker aus dem offiziellen Docker-Repository, erzeugt starke lokale Secrets, startet den Compose-Stack und wartet auf alle Healthchecks. Die Installation liegt standardmäßig unter /opt/vpspanel.
+Der Installer ist idempotent, installiert Docker aus dem offiziellen Docker-Repository, erzeugt starke lokale Secrets und ein lokales Admin-Passwort, öffnet bei aktiver UFW-/firewalld-Firewall die benötigten Ports, startet den Compose-Stack und wartet auf alle Healthchecks. Die Installation liegt standardmäßig unter /opt/vpspanel.
 
-## Einmalige GitHub-Einrichtung
+## Optionale GitHub-Verbindung
+
+Öffentliche GitHub-Repositories lassen sich ohne OAuth direkt über ihre URL deployen. Eine GitHub OAuth App ist nur für private Repositories, die komfortable Repository-Auswahl und automatische Push-Webhooks erforderlich.
 
 1. In GitHub unter **Settings → Developer settings → OAuth Apps** eine OAuth App anlegen.
-2. Als Homepage die Panel-URL und als Callback PANEL-URL/api/auth/github/callback eintragen.
+2. Als Homepage die Panel-URL und als Callback `PANEL-URL/api/auth/github/callback` eintragen.
 3. Zugangsdaten sicher hinterlegen:
 
 ~~~bash
@@ -41,20 +43,18 @@ sudo panelctl github setup
 sudo panelctl github status
 ~~~
 
-panelctl fragt Client-ID und Client-Secret interaktiv ab; das Secret erscheint nicht in der Shell-History. Danach im Browser mit GitHub anmelden.
-
+`panelctl` fragt Client-ID und Client-Secret interaktiv ab; das Secret erscheint nicht in der Shell-History.
 ## User-Flow
 
-1. Mit GitHub anmelden und ein Repository auswählen.
-2. VPSPanel erkennt statische Sites, Node.js, Next.js und FastAPI sowie fehlende Umgebungsvariablen.
-3. Domain eintragen und optional eine eigene PostgreSQL-Datenbank aktivieren.
-4. Deployment starten; Build, Container, Healthcheck, Caddy-Route und HTTPS laufen automatisch.
-5. Standardmäßig wird ein signierter GitHub-Webhook angelegt. Jeder Push auf den gewählten Branch deployt neu.
-6. Logs ansehen oder mit einem Klick auf die letzte funktionierende Version zurückrollen.
-7. Mit „Neu deployen“ jederzeit den aktuellen Branch erneut veröffentlichen.
+1. Mit dem beim Installieren angezeigten lokalen Admin-Passwort anmelden.
+2. Die URL eines öffentlichen GitHub-Repositories einfügen, zum Beispiel `https://github.com/name/projekt`.
+3. VPSPanel erkennt statische Sites, Node.js, Next.js und FastAPI sowie fehlende Umgebungsvariablen.
+4. Domain eintragen und optional eine eigene PostgreSQL-Datenbank aktivieren.
+5. Deployment starten; Download, Build, Container, Healthcheck, Caddy-Route und HTTPS laufen automatisch.
+6. Logs ansehen, erneut deployen oder auf die letzte funktionierende Version zurückrollen.
+7. Optional GitHub verbinden, um private Repositories auszuwählen und bei jedem Push automatisch neu zu deployen.
 
-Für das automatische Anlegen des Webhooks benötigt der angemeldete GitHub-Benutzer Admin-Rechte am Repository. Schlägt nur die Webhook-Einrichtung fehl, läuft das erste Deployment trotzdem und das Panel zeigt einen verständlichen Hinweis.
-
+Öffentliche Repositories werden ohne GitHub-Zugangsdaten geladen. Dadurch bleibt der schnellste Weg ohne OAuth-Einrichtung nutzbar; automatische Push-Webhooks sind in diesem Modus bewusst deaktiviert.
 ## Betrieb mit panelctl
 
 ~~~bash

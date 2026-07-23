@@ -11,6 +11,13 @@ export async function github(path, token, options = {}) {
   return response.json();
 }
 
+export function parseGitHubRepository(value) {
+  const trimmed = String(value || "").trim();
+  const match = trimmed.match(/^(?:https?:\/\/github\.com\/)?([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/?$/i);
+  if (!match) return null;
+  return { owner: match[1], repo: match[2] };
+}
+
 export async function createPushWebhook({ owner, repo, callbackUrl, secret }, token) {
   return github("/repos/" + encodeURIComponent(owner) + "/" + encodeURIComponent(repo) + "/hooks", token, {
     method: "POST",
@@ -36,10 +43,12 @@ function envNames(source) {
 }
 
 export async function inspectRepository({ owner, repo, branch }, token) {
-  const [packageText, requirements, envText, repoData, pnpmLock, yarnLock] = await Promise.all([
-    file(owner, repo, "package.json", branch, token), file(owner, repo, "requirements.txt", branch, token),
-    file(owner, repo, ".env.example", branch, token), github(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, token),
-    file(owner, repo, "pnpm-lock.yaml", branch, token), file(owner, repo, "yarn.lock", branch, token),
+  const repoData = await github(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, token);
+  const resolvedBranch = branch || repoData.default_branch;
+  const [packageText, requirements, envText, pnpmLock, yarnLock] = await Promise.all([
+    file(owner, repo, "package.json", resolvedBranch, token), file(owner, repo, "requirements.txt", resolvedBranch, token),
+    file(owner, repo, ".env.example", resolvedBranch, token), file(owner, repo, "pnpm-lock.yaml", resolvedBranch, token),
+    file(owner, repo, "yarn.lock", resolvedBranch, token),
   ]);
   let framework = "static", buildCommand = null, startCommand = null, port = 80, migrationCommand = null;
   const packageManager = pnpmLock ? "pnpm" : yarnLock ? "yarn" : "npm";
@@ -58,7 +67,7 @@ export async function inspectRepository({ owner, repo, branch }, token) {
   }
   const automatic = new Set(["DATABASE_URL", "NODE_ENV", "PORT", "NEXT_PUBLIC_APP_URL"]);
   return {
-    owner, repo, branch, framework, packageManager, buildCommand, startCommand, port, migrationCommand,
+    owner, repo, branch: resolvedBranch, framework, packageManager, buildCommand, startCommand, port, migrationCommand,
     defaultBranch: repoData.default_branch, private: repoData.private,
     missingVariables: envNames(envText).filter((name) => !automatic.has(name)),
   };

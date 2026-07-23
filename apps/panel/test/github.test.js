@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createPushWebhook, inspectRepository } from "../lib/github.js";
+import { createPushWebhook, inspectRepository, parseGitHubRepository } from "../lib/github.js";
 
 function response(value, status = 200) {
   return { ok: status >= 200 && status < 300, status, async json() { return value; } };
@@ -78,4 +78,11 @@ test("creates a signed push webhook through GitHub", async () => {
     const result = await createPushWebhook({ owner: "owner", repo: "app", callbackUrl: "https://panel.example.com/api/webhooks/github", secret: "hook-secret" }, "token");
     assert.equal(result.id, 42);
   } finally { globalThis.fetch = originalFetch; }
+});
+test("parses public GitHub repository URLs", () => {
+  assert.deepEqual(parseGitHubRepository("https://github.com/openai/openai-node"), { owner: "openai", repo: "openai-node" });
+  assert.deepEqual(parseGitHubRepository("https://github.com/openai/openai-node.git"), { owner: "openai", repo: "openai-node" });
+  assert.deepEqual(parseGitHubRepository("openai/openai-node"), { owner: "openai", repo: "openai-node" });
+  assert.equal(parseGitHubRepository("https://gitlab.com/openai/openai-node"), null);
+  assert.equal(parseGitHubRepository("not-a-repository"), null);
 });
