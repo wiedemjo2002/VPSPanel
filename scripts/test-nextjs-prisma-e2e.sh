@@ -11,6 +11,8 @@ ENV_FILE="${ENV_FILE:-/tmp/vpspanel-feature.env}"
 DOMAIN="next-prisma-$(date +%s).localhost"
 COOKIE_FILE="$(mktemp)"
 TOKEN="$(grep '^E2E_SESSION_TOKEN=' "$ENV_FILE" | tail -n1 | cut -d= -f2- || true)"
+sed -i '/^E2E_MODE=/d' "$ENV_FILE"
+printf 'E2E_MODE=true\n' >> "$ENV_FILE"
 
 if [[ -z "$TOKEN" ]]; then
   TOKEN="$(openssl rand -hex 32)"

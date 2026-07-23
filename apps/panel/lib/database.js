@@ -16,6 +16,10 @@ export async function initializeDatabase() {
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS login_attempts (
+      identity_hash TEXT PRIMARY KEY, attempts INTEGER NOT NULL DEFAULT 0,
+      reset_at TIMESTAMPTZ NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS sessions (
       token_hash TEXT PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       expires_at TIMESTAMPTZ NOT NULL
@@ -50,4 +54,17 @@ export async function getSetting(key) {
 
 export async function setSetting(key, value) {
   await pool.query("INSERT INTO settings (key,value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value,updated_at=NOW()", [key, value]);
+}
+export async function loginAttemptCount(identityHash) {
+  await pool.query("DELETE FROM login_attempts WHERE reset_at<=NOW()");
+  const result = await pool.query("SELECT attempts FROM login_attempts WHERE identity_hash=$1", [identityHash]);
+  return Number(result.rows[0]?.attempts || 0);
+}
+
+export async function recordFailedLogin(identityHash) {
+  await pool.query("INSERT INTO login_attempts (identity_hash,attempts,reset_at) VALUES ($1,1,NOW()+INTERVAL '15 minutes') ON CONFLICT (identity_hash) DO UPDATE SET attempts=login_attempts.attempts+1", [identityHash]);
+}
+
+export async function clearLoginAttempts(identityHash) {
+  await pool.query("DELETE FROM login_attempts WHERE identity_hash=$1", [identityHash]);
 }

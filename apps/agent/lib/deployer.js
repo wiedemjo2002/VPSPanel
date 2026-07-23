@@ -94,7 +94,7 @@ async function downloadSource(input, sourceDirectory) {
   });
   if (!response.ok) throw new Error(`Repository download failed (${response.status})`);
   await writeFile(archive, await limitedResponseBuffer(response), { mode: 0o600 });
-  await command("tar", ["-xzf", archive, "-C", appDirectory, "--strip-components=1"]);
+  await command("tar", ["-xzf", archive, "-C", appDirectory, "--strip-components=1", "--no-same-owner", "--no-same-permissions"]);
   await rm(archive, { force: true });
   return { appDirectory, commitSha: response.headers.get("etag")?.replaceAll('"', "") || null };
 }
@@ -119,6 +119,7 @@ async function ensureDatabase(input) {
     await command("docker", ["volume", "create", `${dbName(input.projectId)}-data`]);
     await command("docker", [
       "run", "-d", "--name", dbName(input.projectId), "--restart", "unless-stopped", "--pids-limit", "256",
+      "--memory", "768m", "--memory-swap", "768m", "--cpus", "1.0",
       "--security-opt", "no-new-privileges:true", "--network", network,
       "-e", `POSTGRES_DB=${databaseUrl.pathname.slice(1)}`,
       "-e", `POSTGRES_USER=${decodeURIComponent(databaseUrl.username)}`,
@@ -139,6 +140,21 @@ async function ensureDatabase(input) {
   throw new Error("Database did not become healthy");
 }
 
+async function checkContainerHealth(input, name) {
+  const url = `http://127.0.0.1:${input.port}/`;
+  if (["static", "static-build"].includes(input.framework)) {
+    await command("docker", ["exec", name, "wget", "-q", "--spider", url]);
+    return;
+  }
+  if (input.framework === "fastapi") {
+    const script = `import sys, urllib.request, urllib.error\ntry:\n r=urllib.request.urlopen("${url}", timeout=2); sys.exit(0 if r.status < 500 else 1)\nexcept urllib.error.HTTPError as e:\n sys.exit(0 if e.code < 500 else 1)\nexcept Exception:\n sys.exit(1)`;
+    await command("docker", ["exec", name, "python", "-c", script]);
+    return;
+  }
+  const script = `fetch("${url}", {redirect:"manual"}).then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))`;
+  await command("docker", ["exec", name, "node", "-e", script]);
+}
+
 async function replaceApp(input, imageTag, envFile) {
   const name = appName(input.projectId);
   const previous = `${name}-previous-${Date.now()}`;
@@ -148,13 +164,14 @@ async function replaceApp(input, imageTag, envFile) {
     await command("docker", ["rename", name, previous]);
   }
   try {
-    await command("docker", ["run", "-d", "--name", name, "--restart", "unless-stopped", "--init", "--pids-limit", "512", "--security-opt", "no-new-privileges:true", "--network", edgeNetwork, "--env-file", envFile, imageTag]);
+    await command("docker", ["run", "-d", "--name", name, "--restart", "unless-stopped", "--init", "--pids-limit", "512",
+      "--memory", "1g", "--memory-swap", "1g", "--cpus", "1.5", "--security-opt", "no-new-privileges:true", "--network", edgeNetwork, "--env-file", envFile, imageTag]);
     if (input.database) await command("docker", ["network", "connect", internalNetwork(input.projectId), name]);
     if (input.config?.migrationCommand === "npx prisma migrate deploy") await command("docker", ["exec", name, "npx", "prisma", "migrate", "deploy"]);
     for (let attempt = 0; attempt < 40; attempt += 1) {
       try {
-        const response = await fetch(`http://${name}:${input.port}/`, { redirect: "manual" });
-        if (response.status < 500) break;
+        await checkContainerHealth(input, name);
+        break;
       } catch {}
       if (attempt === 39) throw new Error("Application health check failed");
       await new Promise((resolve) => setTimeout(resolve, 1000));

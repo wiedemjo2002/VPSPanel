@@ -16,7 +16,7 @@ if [[ "$MODE" == "deploy" ]]; then
   curl -fsS -X POST "$AGENT_URL/actions/deploy" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' --data "$PAYLOAD"
 else
   IMAGE_TAG="${IMAGE_TAG:?Set IMAGE_TAG for rollback}"
-  PAYLOAD="$(printf '{"projectId":"%s","deploymentId":"%s","imageTag":"%s","domain":"fixture.localhost","port":80,"environment":{},"database":false}' "$PROJECT_ID" "$DEPLOYMENT_ID" "$IMAGE_TAG")"
+  PAYLOAD="$(printf '{"projectId":"%s","deploymentId":"%s","imageTag":"%s","domain":"fixture.localhost","framework":"static","port":80,"environment":{},"database":false}' "$PROJECT_ID" "$DEPLOYMENT_ID" "$IMAGE_TAG")"
   curl -fsS -X POST "$AGENT_URL/actions/rollback" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' --data "$PAYLOAD"
 fi
 echo

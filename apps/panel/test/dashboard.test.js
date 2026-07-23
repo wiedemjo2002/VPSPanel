@@ -11,8 +11,8 @@ test("keeps redeploy and rollback as separate top-level UI actions", () => {
 });
 
 test("cache-busts dashboard assets for immediate updates", () => {
-  assert.match(html, /dashboard\.css\?v=0\.5\.0/);
-  assert.match(html, /dashboard\.js\?v=0\.5\.0/);
+  assert.match(html, /dashboard\.css\?v=0\.5\.1/);
+  assert.match(html, /dashboard\.js\?v=0\.5\.1/);
 });
 test("offers password login and public repository quick deploy", () => {
   assert.match(html, /id="adminLoginForm"/);

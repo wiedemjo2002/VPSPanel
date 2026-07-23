@@ -2,6 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { projectDockerfile } from "../lib/templates.js";
 import { renderCaddy } from "../lib/deployer.js";
+import { readFile } from "node:fs/promises";
+
+const deployer = await readFile(new URL("../lib/deployer.js", import.meta.url), "utf8");
 
 test("creates a pinned static runtime image", () => {
   const dockerfile = projectDockerfile({ framework: "static", config: {}, port: 80 });
@@ -28,4 +31,10 @@ test("renders a persisted HTTPS panel domain", () => {
   const config = renderCaddy({}, "panel.example.com");
   assert.match(config, /panel\.example\.com \{/);
   assert.match(config, /reverse_proxy panel:3000/);
+});
+test("limits project and database containers", () => {
+  assert.match(deployer, /"--memory", "1g"/);
+  assert.match(deployer, /"--memory", "768m"/);
+  assert.match(deployer, /"--cpus", "1\.5"/);
+  assert.match(deployer, /--no-same-owner/);
 });

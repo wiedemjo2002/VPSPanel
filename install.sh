@@ -192,6 +192,7 @@ if [[ ${#ADMIN_PASSWORD} -lt 16 || "$ADMIN_PASSWORD" == "change-me" ]]; then
     printf 'PANEL_ADMIN_PASSWORD=%s\n' "$ADMIN_PASSWORD" >> .env
   fi
 fi
+sed -i '/^E2E_MODE=/d; /^E2E_SESSION_TOKEN=/d' .env
 chmod 0600 .env
 
 

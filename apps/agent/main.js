@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { timingSafeEqual } from "node:crypto";
 import { readdir } from "node:fs/promises";
 import { configurePanelDomain, deploy, rollback, persist, projectLogs, storedJob, initializeRuntime, dataRoot } from "./lib/deployer.js";
+import { validDeploymentConfig } from "./lib/validation.js";
 
 const port = Number(process.env.PORT || 3100);
 const token = process.env.AGENT_TOKEN || "";
@@ -44,16 +45,12 @@ function validEnvironment(value) {
   return entries.length <= 100 && entries.every(([key, item]) => /^[A-Z][A-Z0-9_]*$/.test(key) && typeof item === "string" && item.length <= 8192 && !/[\r\n]/.test(item));
 }
 
-function validConfig(value) {
-  return value && typeof value === "object" && !Array.isArray(value) && [undefined, "npx prisma migrate deploy"].includes(value.migrationCommand);
-}
-
 function validDeploy(input) {
   return input && typeof input === "object" &&
     validId(input.projectId, 16) && validId(input.deploymentId, 20) &&
     validRepo(input.owner) && validRepo(input.repo) && validBranch(input.branch) &&
     validDomain(input.domain) && frameworks.has(input.framework) && validPort(input.port) &&
-    typeof input.database === "boolean" && validEnvironment(input.environment) && validConfig(input.config) &&
+    typeof input.database === "boolean" && validEnvironment(input.environment) && validDeploymentConfig(input.config, input.framework) &&
     typeof input.githubToken === "string" && input.githubToken.length <= 512 && (input.githubToken.length === 0 || input.githubToken.length >= 20);
 }
 
@@ -61,7 +58,7 @@ function validRollback(input) {
   if (!input || typeof input !== "object" || !validId(input.projectId, 16)) return false;
   const imagePattern = new RegExp(`^vpspanel-project-${input.projectId}:[a-f0-9]{20}$`);
   return validId(input.deploymentId, 20) &&
-    validDomain(input.domain) && validPort(input.port) && typeof input.database === "boolean" &&
+    validDomain(input.domain) && frameworks.has(input.framework) && validPort(input.port) && typeof input.database === "boolean" &&
     validEnvironment(input.environment) && imagePattern.test(input.imageTag || "");
 }
 

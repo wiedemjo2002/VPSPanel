@@ -4,6 +4,9 @@ services:
   caddy:
     image: caddy:2.10.0-alpine
     restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.50
+    pids_limit: 128
     command: ["caddy", "run", "--config", "/runtime/Caddyfile", "--adapter", "caddyfile"]
     depends_on:
       panel:
@@ -20,11 +23,15 @@ services:
       - caddy_config:/config
     networks:
       - edge
+      - control
 
   panel:
     build:
       context: ./apps/panel
     read_only: true
+    mem_limit: 512m
+    cpus: 1.00
+    pids_limit: 256
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=64m
     security_opt:
@@ -48,6 +55,7 @@ services:
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
       AGENT_URL: http://agent:3100
       AGENT_TOKEN: ${AGENT_TOKEN}
+      E2E_MODE: ${E2E_MODE:-false}
       E2E_SESSION_TOKEN: ${E2E_SESSION_TOKEN:-}
     healthcheck:
       test: ["CMD", "node", "healthcheck.js"]
@@ -55,13 +63,16 @@ services:
       timeout: 3s
       retries: 10
     networks:
-      - edge
+      - control
       - internal
 
   agent:
     build:
       context: ./apps/agent
     read_only: true
+    mem_limit: 1g
+    cpus: 2.00
+    pids_limit: 512
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=256m
       - /run:rw,nosuid,nodev,size=16m
@@ -90,11 +101,14 @@ services:
       timeout: 3s
       retries: 10
     networks:
-      - edge
+      - control
 
   database:
     image: postgres:17.5-alpine
     restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1.00
+    pids_limit: 256
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-vpspanel}
       POSTGRES_USER: ${POSTGRES_USER:-vpspanel}
@@ -111,6 +125,7 @@ services:
 
 networks:
   edge:
+  control:
   internal:
     internal: true
 

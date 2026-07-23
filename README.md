@@ -96,7 +96,9 @@ Projektcontainer hängen nur am Edge-Netzwerk. Optionale Projekt-Datenbanken erh
 
 Der Deployment-Agent benötigt den Docker-Socket und ist deshalb ein sicherheitskritischer Bestandteil. Seine HTTP-API ist nicht öffentlich erreichbar, verlangt ein zufälliges Agent-Token und akzeptiert ausschließlich validierte, fest definierte Aktionen; sie stellt keine freie Shell bereit.
 
-Sichere Voreinstellungen sind ohne zusätzliche Einrichtung aktiv: Secrets liegen nur in einer auf den Administrator beschränkten `.env`, Panel und Agent verwenden schreibgeschützte Dateisysteme sowie minimale Linux-Rechte, Anfragen sind in Größe und Dauer begrenzt und das Dashboard liefert restriktive Browser-Sicherheitsheader. Gestartete Projekt-Container erhalten zusätzlich Prozesslimits und dürfen keine neuen Rechte erlangen. Diese Schutzmaßnahmen verändern weder den Ein-Befehl-Installer noch den normalen Ablauf im Dashboard.
+Sichere Voreinstellungen sind ohne zusätzliche Einrichtung aktiv: Secrets liegen nur in einer auf den Administrator beschränkten `.env`, Panel und Agent verwenden schreibgeschützte Dateisysteme sowie minimale Linux-Rechte, Anfragen sind in Größe und Dauer begrenzt und das Dashboard liefert restriktive Browser-Sicherheitsheader. Fehlgeschlagene Logins werden pro Client persistent begrenzt. Panel, Agent, Caddy, Datenbanken und gestartete Projekte erhalten CPU-, RAM- und Prozesslimits; Deployment-Befehle werden gegen eine feste Allowlist geprüft. Testzugänge sind standardmäßig deaktiviert und werden vom Installer aus der Produktionskonfiguration entfernt.
+
+VPSPanel führt beim Build und Start bewusst Code aus dem gewählten Repository aus. Deshalb sollten auf einem wichtigen Server weiterhin nur eigene oder vertrauenswürdige Repositorys deployt werden.
 
 ## Entwicklung und Tests
 

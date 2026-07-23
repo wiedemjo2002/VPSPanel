@@ -12,6 +12,8 @@ test("creates and exposes a local admin password", () => {
   assert.match(installer, /openssl rand -hex 12/);
   assert.match(compose, /PANEL_ADMIN_PASSWORD: \$\{PANEL_ADMIN_PASSWORD:-\}/);
   assert.match(installer, /local ports=\(80 443 8080\)/);
+  assert.match(installer, /\^E2E_SESSION_TOKEN=\/d/);
+  assert.match(compose, /mem_limit: 512m/);
   assert.match(panel, /url\.pathname === "\/api\/auth\/local"/);
 });
 
@@ -20,6 +22,8 @@ test("disables push webhooks when no GitHub token exists", () => {
 });
 test("persists the HTTPS panel address", () => {
   assert.match(database, /CREATE TABLE IF NOT EXISTS settings/);
+  assert.match(database, /CREATE TABLE IF NOT EXISTS login_attempts/);
+  assert.match(panel, /process\.env\.E2E_MODE === "true"/);
   assert.match(panel, /setSetting\("panel_public_url"/);
   assert.match(panel, /"\/actions\/panel-domain"/);
   assert.match(panel, /linkingUser\?\.is_admin/);

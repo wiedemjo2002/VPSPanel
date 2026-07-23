@@ -3,7 +3,7 @@ import { createHmac, randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
-import { pool, initializeDatabase, currentUser, getSetting, setSetting } from "./lib/database.js";
+import { clearLoginAttempts, currentUser, getSetting, initializeDatabase, loginAttemptCount, pool, recordFailedLogin, setSetting } from "./lib/database.js";
 import { cookie, decrypt, encrypt, parseCookies, randomToken, safeEqual, setCookieSecurity, sign, tokenHash } from "./lib/security.js";
 import { createPushWebhook, github, inspectRepository, parseGitHubRepository } from "./lib/github.js";
 
@@ -15,7 +15,6 @@ const agentToken = process.env.AGENT_TOKEN || "";
 if (agentToken.length < 32 || agentToken === "change-me") throw new Error("AGENT_TOKEN must contain at least 32 characters");
 const panelLanguage = ["de", "en"].includes(process.env.PANEL_LANGUAGE) ? process.env.PANEL_LANGUAGE : "de";
 const adminPassword = process.env.PANEL_ADMIN_PASSWORD || "";
-const loginAttempts = { count: 0, resetAt: 0 };
 const publicDirectory = fileURLToPath(new URL("./public", import.meta.url));
 const startedAt = new Date().toISOString();
 const types = { ".css": "text/css; charset=utf-8", ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".svg": "image/svg+xml" };
@@ -54,6 +53,10 @@ async function body(request, limit = 128_000) { return JSON.parse((await rawBody
 function validDomain(value) { return /^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i.test(value || ""); }
 function validRepoPart(value) { return /^[A-Za-z0-9_.-]{1,100}$/.test(value || ""); }
 function validBranch(value) { return /^(?!\/)(?!.*\.\.)(?!.*\/\/)[A-Za-z0-9._\/-]{1,200}$/.test(value || ""); }
+function loginIdentity(request) {
+  const forwarded = String(request.headers["x-forwarded-for"] || "").split(",").map((value) => value.trim()).filter(Boolean);
+  return tokenHash(forwarded.at(-1) || request.socket.remoteAddress || "unknown");
+}
 function newId(bytes = 8) { return randomBytes(bytes).toString("hex"); }
 
 function checkWriteOrigin(request) {
@@ -169,26 +172,26 @@ async function api(request, response, url) {
     await pool.query("SELECT 1");
     return json(response, 200, { status: "ok", service: "vpspanel", startedAt });
   }
-  if (url.pathname === "/api/meta") return json(response, 200, { publicUrl: panelPublicUrl, localLoginConfigured: adminPassword.length >= 16, githubConfigured: Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET), language: panelLanguage, version: "0.5.0" });
+  if (url.pathname === "/api/meta") return json(response, 200, { publicUrl: panelPublicUrl, localLoginConfigured: adminPassword.length >= 16, githubConfigured: Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET), language: panelLanguage, version: "0.5.1" });
   if (url.pathname === "/api/webhooks/github" && request.method === "POST") return githubWebhook(request, response);
-  if (url.pathname === "/api/e2e/session" && request.method === "GET" && process.env.E2E_SESSION_TOKEN) {
+  if (url.pathname === "/api/e2e/session" && request.method === "GET" && process.env.E2E_MODE === "true" && process.env.E2E_SESSION_TOKEN) {
     if (!safeEqual(url.searchParams.get("token"), process.env.E2E_SESSION_TOKEN)) return json(response, 404, { error: "Not found" });
-    const userResult = await pool.query(`INSERT INTO users (github_id,login,avatar_url,encrypted_token) VALUES (-1,'e2e-user',NULL,$1) ON CONFLICT (github_id) DO UPDATE SET encrypted_token=EXCLUDED.encrypted_token RETURNING id`, [encrypt("")]);
+    let userResult = await pool.query("SELECT id FROM users WHERE is_admin=TRUE LIMIT 1");
+    if (!userResult.rowCount) userResult = await pool.query(`INSERT INTO users (github_id,login,avatar_url,encrypted_token,is_admin) VALUES (-1,'e2e-user',NULL,$1,TRUE) RETURNING id`, [encrypt("")]);
     const sessionToken = randomToken(32);
     await pool.query("INSERT INTO sessions (token_hash,user_id,expires_at) VALUES ($1,$2,NOW()+INTERVAL '1 hour')", [tokenHash(sessionToken), userResult.rows[0].id]);
     return redirect(response, "/app", { "Set-Cookie": cookie("vpspanel_session", sessionToken, { maxAge: 3600 }) });
   }
   if (url.pathname === "/api/auth/local" && request.method === "POST") {
     if (adminPassword.length < 16) return json(response, 503, { error: "Lokale Anmeldung ist noch nicht eingerichtet." });
-    const now = Date.now();
-    if (loginAttempts.resetAt <= now) Object.assign(loginAttempts, { count: 0, resetAt: now + 15 * 60_000 });
-    if (loginAttempts.count >= 10) return json(response, 429, { error: "Zu viele Anmeldeversuche. Bitte warte 15 Minuten." });
+    const identityHash = loginIdentity(request);
+    if (await loginAttemptCount(identityHash) >= 10) return json(response, 429, { error: "Zu viele Anmeldeversuche. Bitte warte 15 Minuten." });
     const input = await body(request, 4096);
     if (typeof input.password !== "string" || !safeEqual(tokenHash(input.password), tokenHash(adminPassword))) {
-      loginAttempts.count += 1;
+      await recordFailedLogin(identityHash);
       return json(response, 401, { error: "Admin-Passwort ist nicht korrekt." });
     }
-    loginAttempts.count = 0;
+    await clearLoginAttempts(identityHash);
     let userResult = await pool.query("SELECT id FROM users WHERE is_admin=TRUE LIMIT 1");
     if (!userResult.rowCount) userResult = await pool.query(`INSERT INTO users (github_id,login,avatar_url,encrypted_token,is_admin) VALUES (0,'admin',NULL,$1,TRUE) RETURNING id`, [encrypt("")]);
     return json(response, 200, { ok: true }, { "Set-Cookie": await createSession(userResult.rows[0].id) });
@@ -346,7 +349,7 @@ async function api(request, response, url) {
       const deploymentId = newId(10);
       await pool.query("INSERT INTO deployments (id,project_id,status,image_tag) VALUES ($1,$2,'deploying',$3)", [deploymentId, project.id, target.image_tag]);
       await pool.query("UPDATE projects SET current_deployment=$1,status='deploying',updated_at=NOW() WHERE id=$2", [deploymentId, project.id]);
-      await agent("/actions/rollback", { method: "POST", body: JSON.stringify({ projectId: project.id, deploymentId, imageTag: target.image_tag, domain: project.domain, port: project.port, environment: decrypt(project.encrypted_env), database: project.config.database }) });
+      await agent("/actions/rollback", { method: "POST", body: JSON.stringify({ projectId: project.id, deploymentId, imageTag: target.image_tag, domain: project.domain, framework: project.framework, port: project.port, environment: decrypt(project.encrypted_env), database: project.config.database }) });
       return json(response, 202, { deploymentId });
     }
   }
