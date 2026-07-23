@@ -1,11 +1,11 @@
 {
   "name": "@vpspanel/agent",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node main.js",
-    "check": "node --check main.js && node --check lib/deployer.js",
+    "check": "node --check main.js && node --check lib/deployer.js && node --check lib/uploads.js && node --check lib/validation.js && node --check lib/runner.js",
     "test": "node --test"
   },
   "engines": {

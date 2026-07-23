@@ -3,6 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { readdir } from "node:fs/promises";
 import { configurePanelDomain, deploy, rollback, persist, projectLogs, storedJob, initializeRuntime, dataRoot } from "./lib/deployer.js";
 import { validDeploymentConfig } from "./lib/validation.js";
+import { receiveUpload, uploadInspection } from "./lib/uploads.js";
 
 const port = Number(process.env.PORT || 3100);
 const token = process.env.AGENT_TOKEN || "";
@@ -76,7 +77,23 @@ const server = createServer(async (request, response) => {
   try {
     if (!authorized(request.headers.authorization)) return json(response, 401, { error: "Unauthorized" });
     const url = new URL(request.url, "http://localhost");
-    if (url.pathname === "/health") return json(response, 200, { status: "ok", actions: ["deploy", "logs", "rollback", "panel-domain"] });
+    if (url.pathname === "/health") return json(response, 200, { status: "ok", actions: ["deploy", "logs", "rollback", "panel-domain", "zip-upload"] });
+
+    if (url.pathname === "/uploads/inspect" && request.method === "POST") {
+      if (request.headers["content-type"] !== "application/zip") return json(response, 415, { error: "Only ZIP uploads are supported" });
+      try { return json(response, 200, await receiveUpload(request, request.headers["x-upload-name"])); }
+      catch (error) {
+        console.error(error);
+        const tooLarge = error.message.includes("100 MB");
+        return json(response, tooLarge ? 413 : 400, { error: tooLarge ? error.message : "Das ZIP konnte nicht sicher gelesen werden. Prüfe Inhalt und Ordnerstruktur." });
+      }
+    }
+
+    const uploadMatch = url.pathname.match(/^\/uploads\/([a-f0-9]{32})$/);
+    if (uploadMatch && request.method === "GET") {
+      const inspection = await uploadInspection(uploadMatch[1]);
+      return inspection ? json(response, 200, inspection) : json(response, 404, { error: "ZIP upload not found" });
+    }
 
     if (url.pathname === "/actions/panel-domain" && request.method === "POST") {
       const input = await body(request, 4096);
@@ -126,7 +143,7 @@ const server = createServer(async (request, response) => {
 });
 
 await initializeRuntime();
-server.requestTimeout = 30_000;
+server.requestTimeout = 300_000;
 server.headersTimeout = 15_000;
 server.keepAliveTimeout = 5_000;
 server.maxHeadersCount = 100;

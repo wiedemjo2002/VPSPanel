@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#080c18" />
     <title>VPSPanel · Johannes Wiedemann</title>
-    <link rel="stylesheet" href="/dashboard.css?v=0.5.1" />
+    <link rel="stylesheet" href="/dashboard.css?v=0.6.0" />
   </head>
   <body>
     <div class="noise"></div>
@@ -28,7 +28,7 @@
       <section class="landing" id="landingView">
         <p class="eyebrow" data-i18n="heroEyebrow">DEIN SERVER. OHNE SERVERKRAM.</p>
         <h1 data-i18n-html="heroTitle">Was möchtest du<br /><span>online bringen?</span></h1>
-        <p class="intro" data-i18n="heroIntro">Öffentliche GitHub-URL einfügen und deployen. Ohne OAuth, ohne Serverkram.</p>
+        <p class="intro" data-i18n="heroIntro">GitHub-URL einfügen oder ZIP hochladen. Den Rest erledigt VPSPanel.</p>
         <form class="login-card" id="adminLoginForm">
           <label class="field"><span data-i18n="adminPassword">Admin-Passwort</span><input id="adminPasswordInput" type="password" autocomplete="current-password" required /></label>
           <button class="primary hero-button" type="submit"><span data-i18n="openPanel">Panel öffnen</span><span>→</span></button>
@@ -51,7 +51,7 @@
         <div class="project-grid" id="projectGrid"></div>
         <div class="empty hidden" id="emptyState">
           <div class="empty-icon">↗</div><h2 data-i18n="firstApp">Deine erste App wartet</h2>
-          <p data-i18n="emptyIntro">Wähle ein Repository aus. Den Serverkram übernehmen wir.</p>
+          <p data-i18n="emptyIntro">GitHub-Repository oder ZIP auswählen. Den Serverkram übernehmen wir.</p>
           <button class="primary" id="emptyDeployButton" data-i18n="deployAppShort">App deployen</button>
         </div>
       </section>
@@ -63,6 +63,8 @@
         <section id="repositoryStep">
           <label class="field"><span data-i18n="repositoryUrl">Öffentliche GitHub-URL</span><input id="repositoryUrlInput" type="url" placeholder="https://github.com/name/projekt" autocomplete="off" /></label>
           <label class="field hidden" id="connectedRepositoryField"><span data-i18n="connectedRepository">Oder verbundenes Repository</span><select id="repositorySelect"><option value="" data-i18n="loadingRepository">Repository wird geladen …</option></select></label>
+          <div class="source-divider"><span data-i18n="orZip">oder ohne Git</span></div>
+          <label class="upload-zone" for="projectZipInput"><input id="projectZipInput" type="file" accept=".zip,application/zip" /><strong data-i18n="uploadZip">Projekt als ZIP hochladen</strong><small id="zipFileLabel" data-i18n="zipHint">ZIP auswählen oder hierher ziehen · maximal 100 MB</small></label>
           <label class="field"><span>Branch</span><input id="branchInput" placeholder="automatisch" /></label>
           <button class="primary full" id="inspectButton"><span data-i18n="analyzeProject">Projekt analysieren</span><span>→</span></button>
         </section>
@@ -117,6 +119,6 @@
       <span class="footer-signature"><strong>VPSPanel</strong><span data-i18n="craftedBy">Entwickelt von Johannes Wiedemann</span></span>
       <span id="version">VPSPanel</span>
     </footer>
-    <script src="/dashboard.js?v=0.5.1" type="module"></script>
+    <script src="/dashboard.js?v=0.6.0" type="module"></script>
   </body>
 </html>

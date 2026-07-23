@@ -18,7 +18,7 @@ test("creates and exposes a local admin password", () => {
 });
 
 test("disables push webhooks when no GitHub token exists", () => {
-  assert.match(panel, /const autoDeploy = Boolean\(githubToken\)/);
+  assert.match(panel, /const autoDeploy = !uploaded && Boolean\(githubToken\)/);
 });
 test("persists the HTTPS panel address", () => {
   assert.match(database, /CREATE TABLE IF NOT EXISTS settings/);
@@ -26,5 +26,6 @@ test("persists the HTTPS panel address", () => {
   assert.match(panel, /process\.env\.E2E_MODE === "true"/);
   assert.match(panel, /setSetting\("panel_public_url"/);
   assert.match(panel, /"\/actions\/panel-domain"/);
+  assert.match(panel, /"\/api\/uploads\/inspect"/);
   assert.match(panel, /linkingUser\?\.is_admin/);
 });

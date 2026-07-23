@@ -12,16 +12,17 @@ const messages = {
   de: {
     brandBy: "von Johannes Wiedemann", serverReady: "Server bereit", heroEyebrow: "DEIN SERVER. OHNE SERVERKRAM.",
     heroTitle: "Was möchtest du<br /><span>online bringen?</span>",
-    heroIntro: "Öffentliche GitHub-URL einfügen und deployen. Ohne OAuth, ohne Serverkram.",
+    heroIntro: "GitHub-URL einfügen oder ZIP hochladen. Den Rest erledigt VPSPanel.",
     startGithub: "Mit GitHub starten", heroHint: "Das Admin-Passwort wurde bei der Installation angezeigt.",
     adminPassword: "Admin-Passwort", openPanel: "Panel öffnen", optionalGithub: "GitHub verbinden",
     flowAria: "Deployment-Ablauf", repository: "Repository", flowRepo: "Wähle dein Projekt aus.",
     domain: "Domain", flowDomain: "Sag uns, wo es laufen soll.", online: "Online", flowOnline: "Wir erledigen den Rest.",
     projects: "PROJEKTE", yourApps: "Deine Apps", overview: "Alles Wichtige auf einen Blick.",
     deployApp: "+ App deployen", firstApp: "Deine erste App wartet",
-    emptyIntro: "Wähle ein Repository aus. Den Serverkram übernehmen wir.", deployAppShort: "App deployen",
+    emptyIntro: "GitHub-Repository oder ZIP auswählen. Den Serverkram übernehmen wir.", deployAppShort: "App deployen",
     newProject: "NEUES PROJEKT", selectRepository: "Repository auswählen", close: "Schließen",
     githubRepository: "GitHub-Repository", repositoryUrl: "Öffentliche GitHub-URL", connectedRepository: "Oder verbundenes Repository", loadingRepository: "Repository wird geladen …",
+    orZip: "oder ohne Git", uploadZip: "Projekt als ZIP hochladen", zipHint: "ZIP auswählen oder hierher ziehen · maximal 100 MB", zipTooLarge: "Die ZIP-Datei darf maximal 100 MB groß sein.",
     analyzeProject: "Projekt analysieren", createPostgres: "PostgreSQL automatisch erstellen",
     databaseHint: "Sicheres Passwort und DATABASE_URL inklusive", deployEveryPush: "Bei jedem Push neu deployen",
     webhookHint: "VPSPanel richtet den GitHub-Webhook automatisch ein", advancedSettings: "Erweiterte Einstellungen",
@@ -35,7 +36,7 @@ const messages = {
     automatic: "Automatisch", detectedTitle: "Wir haben Folgendes erkannt", type: "Typ", port: "Port",
     build: "Build", start: "Start", packageManager: "Paketmanager", migration: "Migration",
     visibility: "Sichtbarkeit", privateLabel: "Privat", publicLabel: "Öffentlich", requiredValue: "Erforderlicher Wert",
-    reviewDeployment: "Deployment prüfen", selectRepoError: "Bitte gib eine öffentliche GitHub-URL ein oder wähle ein verbundenes Repository.",
+    reviewDeployment: "Deployment prüfen", selectRepoError: "Bitte gib eine GitHub-URL ein, wähle ein Repository oder lade ein ZIP hoch.",
     analyzing: "Projekt wird analysiert …", appOnline: "Deine App ist online", deployFailed: "Deployment fehlgeschlagen",
     previousKeepsRunning: "Die vorherige Version läuft weiterhin, falls bereits eine vorhanden war.",
     openLogsHint: "Öffne die Logs für die genaue Ursache.", domainRequired: "Bitte gib die Domain deiner App ein.",
@@ -52,16 +53,17 @@ const messages = {
   en: {
     brandBy: "by Johannes Wiedemann", serverReady: "Server ready", heroEyebrow: "YOUR SERVER. WITHOUT THE SERVER WORK.",
     heroTitle: "What do you want to<br /><span>put online?</span>",
-    heroIntro: "Paste a public GitHub URL and deploy. No OAuth, no server work.",
+    heroIntro: "Paste a GitHub URL or upload a ZIP. VPSPanel handles the rest.",
     startGithub: "Start with GitHub", heroHint: "The admin password was shown during installation.",
     adminPassword: "Admin password", openPanel: "Open panel", optionalGithub: "Connect GitHub",
     flowAria: "Deployment flow", repository: "Repository", flowRepo: "Choose your project.",
     domain: "Domain", flowDomain: "Tell us where it should run.", online: "Online", flowOnline: "We handle the rest.",
     projects: "PROJECTS", yourApps: "Your apps", overview: "Everything important at a glance.",
     deployApp: "+ Deploy app", firstApp: "Your first app is waiting",
-    emptyIntro: "Choose a repository. We handle the server work.", deployAppShort: "Deploy app",
+    emptyIntro: "Choose a GitHub repository or ZIP. We handle the server work.", deployAppShort: "Deploy app",
     newProject: "NEW PROJECT", selectRepository: "Select repository", close: "Close",
     githubRepository: "GitHub repository", repositoryUrl: "Public GitHub URL", connectedRepository: "Or connected repository", loadingRepository: "Loading repositories …",
+    orZip: "or without Git", uploadZip: "Upload project as ZIP", zipHint: "Choose or drop a ZIP · maximum 100 MB", zipTooLarge: "The ZIP file must not exceed 100 MB.",
     analyzeProject: "Analyze project", createPostgres: "Create PostgreSQL automatically",
     databaseHint: "Secure password and DATABASE_URL included", deployEveryPush: "Deploy on every push",
     webhookHint: "VPSPanel configures the GitHub webhook automatically", advancedSettings: "Advanced settings",
@@ -75,7 +77,7 @@ const messages = {
     automatic: "Automatic", detectedTitle: "Here is what we detected", type: "Type", port: "Port",
     build: "Build", start: "Start", packageManager: "Package manager", migration: "Migration",
     visibility: "Visibility", privateLabel: "Private", publicLabel: "Public", requiredValue: "Required value",
-    reviewDeployment: "Review deployment", selectRepoError: "Enter a public GitHub URL or choose a connected repository.",
+    reviewDeployment: "Review deployment", selectRepoError: "Enter a GitHub URL, choose a repository, or upload a ZIP.",
     analyzing: "Analyzing project …", appOnline: "Your app is online", deployFailed: "Deployment failed",
     previousKeepsRunning: "The previous version remains online if one already exists.",
     openLogsHint: "Open the logs to see the exact cause.", domainRequired: "Please enter your app domain.",
@@ -96,6 +98,7 @@ let repositories = [];
 let currentProjects = [];
 let inspection = null;
 let selectedRepository = null;
+let selectedUploadId = null;
 let pollingTimer = null;
 let githubConnected = false;
 let githubConfigured = false;
@@ -219,12 +222,15 @@ function resetDialog() {
   clearError();
   inspection = null;
   selectedRepository = null;
+  selectedUploadId = null;
   $("#repositoryStep").classList.remove("hidden");
   $("#configureStep").classList.add("hidden");
   $("#progressStep").classList.add("hidden");
   $("#dialogTitle").textContent = t("selectRepository");
   $("#repositorySelect").value = "";
   $("#repositoryUrlInput").value = "";
+  $("#projectZipInput").value = "";
+  $("#zipFileLabel").textContent = t("zipHint");
   $("#branchInput").value = "";
   $("#domainInput").value = "";
   $("#databaseInput").checked = false;
@@ -275,18 +281,29 @@ function showInspection(result) {
 
 async function inspectSelected() {
   clearError();
+  const zipFile = $("#projectZipInput").files[0];
   const repositoryUrl = $("#repositoryUrlInput").value.trim();
   const index = $("#repositorySelect").value;
   const connected = index === "" ? null : repositories[Number(index)];
-  if (!repositoryUrl && !connected) return showError(t("selectRepoError"));
+  if (!zipFile && !repositoryUrl && !connected) return showError(t("selectRepoError"));
+  if (zipFile && zipFile.size > 100 * 1024 * 1024) return showError(t("zipTooLarge"));
   const branch = $("#branchInput").value.trim() || connected?.defaultBranch || "";
-  const request = repositoryUrl ? { repositoryUrl, branch } : { owner: connected.owner, repo: connected.name, branch };
   const button = $("#inspectButton");
   button.disabled = true;
   button.textContent = t("analyzing");
   try {
-    inspection = await api("/api/inspect", { method: "POST", body: JSON.stringify(request) });
-    selectedRepository = { owner: inspection.owner, name: inspection.repo };
+    if (zipFile) {
+      inspection = await api("/api/uploads/inspect", { method: "POST", body: zipFile, headers: { "Content-Type": "application/zip", "X-Upload-Name": encodeURIComponent(zipFile.name) } });
+      selectedUploadId = inspection.uploadId;
+      selectedRepository = { owner: inspection.owner, name: inspection.repo };
+      $("#autoDeployInput").checked = false;
+      $("#autoDeployRow").classList.add("hidden");
+    } else {
+      const request = repositoryUrl ? { repositoryUrl, branch } : { owner: connected.owner, repo: connected.name, branch };
+      inspection = await api("/api/inspect", { method: "POST", body: JSON.stringify(request) });
+      selectedUploadId = null;
+      selectedRepository = { owner: inspection.owner, name: inspection.repo };
+    }
     showInspection(inspection);
   } catch (error) { showError(error.message); }
   finally { button.disabled = false; button.innerHTML = "<span>" + t("analyzeProject") + "</span><span>→</span>"; }
@@ -353,7 +370,7 @@ async function deployProject() {
   try {
     const result = await api("/api/projects", {
       method: "POST",
-      body: JSON.stringify({ owner: selectedRepository.owner, repo: selectedRepository.name, branch: inspection.branch, domain, database: $("#databaseInput").checked, autoDeploy: $("#autoDeployInput").checked, environment: environmentValues() }),
+      body: JSON.stringify({ ...(selectedUploadId ? { uploadId: selectedUploadId } : { owner: selectedRepository.owner, repo: selectedRepository.name, branch: inspection.branch }), domain, database: $("#databaseInput").checked, autoDeploy: $("#autoDeployInput").checked, environment: environmentValues() }),
     });
     if (result.webhookWarning) showError(result.webhookWarning);
     $("#configureStep").classList.add("hidden");
@@ -485,7 +502,27 @@ $("#inspectButton").addEventListener("click", inspectSelected);
 $("#deploySubmitButton").addEventListener("click", deployProject);
 $("#repositorySelect").addEventListener("change", () => {
   const repo = repositories[Number($("#repositorySelect").value)];
-  if (repo) { $("#branchInput").value = repo.defaultBranch; $("#repositoryUrlInput").value = ""; }
+  if (repo) { $("#branchInput").value = repo.defaultBranch; $("#repositoryUrlInput").value = ""; $("#projectZipInput").value = ""; $("#zipFileLabel").textContent = t("zipHint"); }
+});
+$("#repositoryUrlInput").addEventListener("input", () => {
+  if ($("#repositoryUrlInput").value) { $("#projectZipInput").value = ""; $("#zipFileLabel").textContent = t("zipHint"); }
+});
+$("#projectZipInput").addEventListener("change", () => {
+  const file = $("#projectZipInput").files[0];
+  $("#zipFileLabel").textContent = file ? file.name : t("zipHint");
+  if (file) { $("#repositoryUrlInput").value = ""; $("#repositorySelect").value = ""; $("#branchInput").value = ""; }
+});
+
+const uploadZone = $(".upload-zone");
+for (const eventName of ["dragenter", "dragover"]) uploadZone.addEventListener(eventName, (event) => { event.preventDefault(); uploadZone.classList.add("dragging"); });
+for (const eventName of ["dragleave", "drop"]) uploadZone.addEventListener(eventName, (event) => { event.preventDefault(); uploadZone.classList.remove("dragging"); });
+uploadZone.addEventListener("drop", (event) => {
+  const file = [...event.dataTransfer.files].find((item) => item.name.toLowerCase().endsWith(".zip"));
+  if (!file) return showError(t("selectRepoError"));
+  const transfer = new DataTransfer();
+  transfer.items.add(file);
+  $("#projectZipInput").files = transfer.files;
+  $("#projectZipInput").dispatchEvent(new Event("change"));
 });
 $("[data-close]").addEventListener("click", () => { window.clearTimeout(pollingTimer); deployDialog.close(); });
 $("[data-close-logs]").addEventListener("click", () => logDialog.close());

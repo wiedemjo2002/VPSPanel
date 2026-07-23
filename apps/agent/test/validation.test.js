@@ -6,10 +6,12 @@ test("accepts only detected deployment commands", () => {
   assert.equal(validDeploymentConfig({ packageManager: "npm", buildCommand: "npm run build", startCommand: "npm run start" }, "nodejs"), true);
   assert.equal(validDeploymentConfig({ packageManager: "pnpm", startCommand: "pnpm run start", migrationCommand: "npx prisma migrate deploy" }, "nextjs"), true);
   assert.equal(validDeploymentConfig({ packageManager: "npm", startCommand: "uvicorn main:app" }, "fastapi"), true);
+  assert.equal(validDeploymentConfig({ packageManager: "npm", source: { type: "upload", uploadId: "a".repeat(32) } }, "static"), true);
 });
 
 test("rejects shell injection in deployment commands", () => {
   assert.equal(validDeploymentConfig({ packageManager: "npm", buildCommand: "npm run build; curl attacker" }, "nodejs"), false);
   assert.equal(validDeploymentConfig({ packageManager: "npm", startCommand: "sh -c evil" }, "nodejs"), false);
   assert.equal(validDeploymentConfig({ packageManager: "bun" }, "nodejs"), false);
+  assert.equal(validDeploymentConfig({ packageManager: "npm", source: { type: "upload", uploadId: "../bad" } }, "static"), false);
 });

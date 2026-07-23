@@ -1,7 +1,8 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { command, containerExists } from "./runner.js";
 import { projectDockerfile } from "./templates.js";
+import { cleanupExpiredUploads, copyUploadedSource, removeUpload } from "./uploads.js";
 
 const dataRoot = process.env.PROJECTS_ROOT || "/data/projects";
 const edgeNetwork = process.env.EDGE_NETWORK || "vpspanel_edge";
@@ -58,6 +59,7 @@ async function writeCaddy(registry) {
 }
 
 export async function initializeRuntime() {
+  await cleanupExpiredUploads();
   await mkdir(dirname(caddyConfigPath), { recursive: true });
   const registry = await readRegistry();
   await writeFile(caddyRegistryPath, JSON.stringify(registry, null, 2), { mode: 0o600 });
@@ -97,6 +99,20 @@ async function downloadSource(input, sourceDirectory) {
   await command("tar", ["-xzf", archive, "-C", appDirectory, "--strip-components=1", "--no-same-owner", "--no-same-permissions"]);
   await rm(archive, { force: true });
   return { appDirectory, commitSha: response.headers.get("etag")?.replaceAll('"', "") || null };
+}
+
+async function prepareSource(input, sourceDirectory) {
+  if (input.config.source?.type !== "upload") return downloadSource(input, sourceDirectory);
+  const appDirectory = join(sourceDirectory, "app");
+  const canonicalSource = join(dataRoot, input.projectId, "uploaded-source");
+  await mkdir(sourceDirectory, { recursive: true });
+  try { await access(canonicalSource); }
+  catch {
+    await copyUploadedSource(input.config.source.uploadId, canonicalSource);
+    await removeUpload(input.config.source.uploadId);
+  }
+  await cp(canonicalSource, appDirectory, { recursive: true, errorOnExist: true });
+  return { appDirectory, commitSha: `zip:${input.config.source.uploadId}` };
 }
 
 async function writeEnvironment(projectDirectory, environment) {
@@ -217,7 +233,7 @@ export async function deploy(input, job) {
   const sourceDirectory = join(projectDirectory, "deployments", input.deploymentId);
   try {
     await setStep(job, "Repository wird geladen", "running");
-    const source = await downloadSource(input, sourceDirectory);
+    const source = await prepareSource(input, sourceDirectory);
     job.commitSha = source.commitSha;
     await setStep(job, "Repository wird geladen", "done");
     await setStep(job, "Datenbank wird erstellt", input.database ? "running" : "skipped");

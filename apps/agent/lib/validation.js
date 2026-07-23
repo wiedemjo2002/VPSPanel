@@ -2,6 +2,7 @@ export function validDeploymentConfig(value, framework) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const packageManagers = new Set(["npm", "pnpm", "yarn"]);
   if (!packageManagers.has(value.packageManager)) return false;
+  if (value.source !== undefined && (!value.source || value.source.type !== "upload" || !/^[a-f0-9]{32}$/.test(value.source.uploadId || ""))) return false;
   const buildCommand = `${value.packageManager} run build`;
   const startCommand = framework === "fastapi" ? "uvicorn main:app" : `${value.packageManager} run start`;
   return [undefined, null, buildCommand].includes(value.buildCommand) &&

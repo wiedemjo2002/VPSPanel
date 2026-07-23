@@ -1,6 +1,6 @@
 FROM node:22.17.0-alpine
 
-RUN apk add --no-cache docker-cli tar
+RUN apk add --no-cache docker-cli tar unzip
 WORKDIR /app
 COPY package.json main.js healthcheck.js ./
 COPY lib ./lib

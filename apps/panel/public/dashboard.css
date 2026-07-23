@@ -33,3 +33,10 @@ footer { min-height:72px;border-top:1px solid var(--line);color:#647089;font-siz
 .https-success p { color:var(--muted);font-size:12px;line-height:1.55; }
 .settings-logout { margin-top:22px; }
 .avatar-button { color:var(--accent);font-weight:800; }
+.source-divider { display:flex;align-items:center;gap:12px;color:#66728b;font-size:11px;margin:4px 0 14px;text-transform:uppercase;letter-spacing:.12em; }
+.source-divider::before,.source-divider::after { content:"";height:1px;flex:1;background:var(--line); }
+.upload-zone { display:grid;place-items:center;gap:6px;padding:20px;margin-bottom:18px;border:1px dashed rgba(105,231,178,.32);border-radius:13px;background:rgba(105,231,178,.04);cursor:pointer;text-align:center;transition:.2s; }
+.upload-zone:hover,.upload-zone.dragging { border-color:rgba(105,231,178,.65);background:rgba(105,231,178,.08);transform:translateY(-1px); }
+.upload-zone input { position:absolute;width:1px;height:1px;opacity:0;pointer-events:none; }
+.upload-zone strong { color:#dce6f5;font-size:14px; }
+.upload-zone small { color:var(--muted);font-size:11px;overflow-wrap:anywhere; }

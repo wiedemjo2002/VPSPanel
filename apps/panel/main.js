@@ -53,6 +53,7 @@ async function body(request, limit = 128_000) { return JSON.parse((await rawBody
 function validDomain(value) { return /^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i.test(value || ""); }
 function validRepoPart(value) { return /^[A-Za-z0-9_.-]{1,100}$/.test(value || ""); }
 function validBranch(value) { return /^(?!\/)(?!.*\.\.)(?!.*\/\/)[A-Za-z0-9._\/-]{1,200}$/.test(value || ""); }
+function validUploadId(value) { return /^[a-f0-9]{32}$/.test(value || ""); }
 function loginIdentity(request) {
   const forwarded = String(request.headers["x-forwarded-for"] || "").split(",").map((value) => value.trim()).filter(Boolean);
   return tokenHash(forwarded.at(-1) || request.socket.remoteAddress || "unknown");
@@ -77,6 +78,22 @@ async function agent(path, options = {}) {
   });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(result.error || `Agent request failed (${response.status})`);
+  return result;
+}
+
+async function agentUpload(request) {
+  const declared = Number(request.headers["content-length"] || 0);
+  if (declared > 100 * 1024 * 1024) throw new Error("Die ZIP-Datei ist größer als 100 MB.");
+  const response = await fetch(`${agentUrl}/uploads/inspect`, {
+    method: "POST", body: request, duplex: "half", signal: AbortSignal.timeout(300_000),
+    headers: {
+      Authorization: `Bearer ${agentToken}`, "Content-Type": "application/zip",
+      "X-Upload-Name": String(request.headers["x-upload-name"] || "project.zip"),
+      ...(declared ? { "Content-Length": String(declared) } : {}),
+    },
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) { const error = new Error(result.error || `ZIP upload failed (${response.status})`); error.status = response.status; throw error; }
   return result;
 }
 
@@ -133,7 +150,7 @@ async function startDeployment(project, githubToken, deploymentId = newId(10)) {
     await agent("/actions/deploy", { method: "POST", body: JSON.stringify({
       projectId: project.id, deploymentId, owner: project.owner, repo: project.repo, branch: project.branch,
       domain: project.domain, framework: project.framework, port: project.port, environment,
-      database: Boolean(project.config.database), config: project.config, githubToken,
+      database: Boolean(project.config.database), config: project.config, githubToken: project.config.source?.type === "upload" ? "" : githubToken,
     }) });
   } catch (error) {
     await pool.query("UPDATE projects SET status='failed',updated_at=NOW() WHERE id=$1", [project.id]);
@@ -172,7 +189,7 @@ async function api(request, response, url) {
     await pool.query("SELECT 1");
     return json(response, 200, { status: "ok", service: "vpspanel", startedAt });
   }
-  if (url.pathname === "/api/meta") return json(response, 200, { publicUrl: panelPublicUrl, localLoginConfigured: adminPassword.length >= 16, githubConfigured: Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET), language: panelLanguage, version: "0.5.1" });
+  if (url.pathname === "/api/meta") return json(response, 200, { publicUrl: panelPublicUrl, localLoginConfigured: adminPassword.length >= 16, githubConfigured: Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET), language: panelLanguage, version: "0.6.0" });
   if (url.pathname === "/api/webhooks/github" && request.method === "POST") return githubWebhook(request, response);
   if (url.pathname === "/api/e2e/session" && request.method === "GET" && process.env.E2E_MODE === "true" && process.env.E2E_SESSION_TOKEN) {
     if (!safeEqual(url.searchParams.get("token"), process.env.E2E_SESSION_TOKEN)) return json(response, 404, { error: "Not found" });
@@ -234,6 +251,11 @@ async function api(request, response, url) {
   if (!user?.is_admin) return json(response, 401, { error: "Bitte zuerst als Administrator am Panel anmelden." });
   const githubToken = decrypt(user.encrypted_token);
 
+  if (url.pathname === "/api/uploads/inspect" && request.method === "POST") {
+    if (request.headers["content-type"] !== "application/zip") return json(response, 415, { error: "Bitte lade eine ZIP-Datei hoch." });
+    return json(response, 200, await agentUpload(request));
+  }
+
   if (url.pathname === "/api/settings" && request.method === "GET") {
     return json(response, 200, { publicUrl: panelPublicUrl, httpsEnabled: panelPublicUrl.startsWith("https://") });
   }
@@ -274,8 +296,14 @@ async function api(request, response, url) {
   }
   if (url.pathname === "/api/projects" && request.method === "POST") {
     const input = await body(request);
-    if (!validRepoPart(input.owner) || !validRepoPart(input.repo) || !validBranch(input.branch) || !validDomain(input.domain)) return json(response, 400, { error: "Repository oder Domain ist ungültig." });
-    const inspection = await inspectRepository(input, githubToken);
+    if (!validDomain(input.domain)) return json(response, 400, { error: "Die Domain ist ungültig." });
+    const uploaded = input.uploadId !== undefined;
+    if (uploaded && !validUploadId(input.uploadId)) return json(response, 400, { error: "Der ZIP-Upload ist ungültig oder abgelaufen." });
+    if (!uploaded && (!validRepoPart(input.owner) || !validRepoPart(input.repo) || !validBranch(input.branch))) return json(response, 400, { error: "Repository oder Branch ist ungültig." });
+    const inspection = uploaded ? await agent(`/uploads/${input.uploadId}`) : await inspectRepository(input, githubToken);
+    const owner = inspection.owner;
+    const repo = inspection.repo;
+    const branch = inspection.branch;
     const supplied = input.environment && typeof input.environment === "object" ? input.environment : {};
     for (const [key, value] of Object.entries(supplied)) if (!/^[A-Z][A-Z0-9_]*$/.test(key) || typeof value !== "string" || value.length > 8192 || /[\r\n]/.test(value)) return json(response, 400, { error: `Ungültige Variable: ${key}` });
     const missing = inspection.missingVariables.filter((name) => !supplied[name]);
@@ -288,13 +316,13 @@ async function api(request, response, url) {
       const password = newId(24);
       environment.DATABASE_URL = `postgresql://app:${password}@vpspanel-db-${projectId}:5432/app`;
     }
-    const autoDeploy = Boolean(githubToken) && input.autoDeploy !== false;
+    const autoDeploy = !uploaded && Boolean(githubToken) && input.autoDeploy !== false;
     const webhookSecret = autoDeploy ? randomToken(32) : null;
-    const config = { database, buildCommand: inspection.buildCommand, startCommand: inspection.startCommand, migrationCommand: inspection.migrationCommand, packageManager: inspection.packageManager, autoDeploy, webhookSecret: webhookSecret ? encrypt(webhookSecret) : null };
+    const config = { database, buildCommand: inspection.buildCommand, startCommand: inspection.startCommand, migrationCommand: inspection.migrationCommand, packageManager: inspection.packageManager, autoDeploy, webhookSecret: webhookSecret ? encrypt(webhookSecret) : null, ...(uploaded ? { source: { type: "upload", uploadId: input.uploadId } } : {}) };
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
-      await client.query(`INSERT INTO projects (id,user_id,owner,repo,branch,name,domain,framework,port,status,config,encrypted_env,current_deployment) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'queued',$10,$11,$12)`, [projectId, user.id, input.owner, input.repo, input.branch, input.repo, input.domain.toLowerCase(), inspection.framework, inspection.port, config, encrypt(environment), deploymentId]);
+      await client.query(`INSERT INTO projects (id,user_id,owner,repo,branch,name,domain,framework,port,status,config,encrypted_env,current_deployment) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'queued',$10,$11,$12)`, [projectId, user.id, owner, repo, branch, repo, input.domain.toLowerCase(), inspection.framework, inspection.port, config, encrypt(environment), deploymentId]);
       await client.query("INSERT INTO deployments (id,project_id,status) VALUES ($1,$2,'queued')", [deploymentId, projectId]);
       await client.query("COMMIT");
     } catch (error) {
@@ -303,7 +331,7 @@ async function api(request, response, url) {
       throw error;
     } finally { client.release(); }
     try {
-      await agent("/actions/deploy", { method: "POST", body: JSON.stringify({ projectId, deploymentId, owner: input.owner, repo: input.repo, branch: input.branch, domain: input.domain.toLowerCase(), framework: inspection.framework, port: inspection.port, environment, database, config, githubToken }) });
+      await agent("/actions/deploy", { method: "POST", body: JSON.stringify({ projectId, deploymentId, owner, repo, branch, domain: input.domain.toLowerCase(), framework: inspection.framework, port: inspection.port, environment, database, config, githubToken: uploaded ? "" : githubToken }) });
       await pool.query("UPDATE projects SET status='deploying',updated_at=NOW() WHERE id=$1", [projectId]);
       await pool.query("UPDATE deployments SET status='deploying' WHERE id=$1", [deploymentId]);
     } catch (error) {
@@ -363,10 +391,11 @@ const server = createServer(async (request, response) => {
     await asset(request, response);
   } catch (error) {
     console.error(error);
-    json(response, 500, { error: error.message?.startsWith("GitHub request") ? "GitHub konnte nicht erreicht werden." : "Die Aktion konnte nicht abgeschlossen werden." });
+    const publicError = error.message?.startsWith("GitHub request") ? "GitHub konnte nicht erreicht werden." : error.message?.includes("ZIP") ? error.message : "Die Aktion konnte nicht abgeschlossen werden.";
+    json(response, Number.isInteger(error.status) && error.status >= 400 && error.status < 500 ? error.status : 500, { error: publicError });
   }
 });
-server.requestTimeout = 30_000;
+server.requestTimeout = 300_000;
 server.headersTimeout = 15_000;
 server.keepAliveTimeout = 5_000;
 server.maxHeadersCount = 100;

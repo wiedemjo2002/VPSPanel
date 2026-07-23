@@ -2,7 +2,7 @@
 
 VPSPanel macht aus einem frischen Ubuntu- oder Debian-VPS eine kleine Self-Hosting-Plattform:
 
-> Öffentliche GitHub-URL einfügen, Domain eintragen, online.
+> GitHub-URL einfügen oder ZIP hochladen, Domain eintragen, online.
 
 Der Installer richtet Docker Engine, Docker Compose, Caddy, PostgreSQL, das Panel und den Deployment-Agenten automatisch ein.
 
@@ -36,6 +36,11 @@ Das Dashboard ist direkt nach der Installation durch ein zufällig erzeugtes Adm
 
 Für HTTPS im Dashboard oben rechts das Zahnrad öffnen, eine Domain eintragen und **HTTPS aktivieren** wählen. Zuvor muss der A-Record (und ein vorhandener AAAA-Record) der Domain auf den VPS zeigen. VPSPanel schreibt die Caddy-Konfiguration; Caddy beschafft und erneuert das öffentliche TLS-Zertifikat automatisch. Die lokale Server-Firewall wird vom Installer für 80, 443 und 8080 vorbereitet. Falls der VPS-Anbieter zusätzlich eine Netzwerk-Firewall besitzt, müssen dort 80 und 443 ebenfalls freigegeben sein.
 
+## Projekt als ZIP hochladen
+
+Git ist für lokale Projekte nicht erforderlich. Im Dialog **App deployen** kann alternativ eine ZIP-Datei ausgewählt oder per Drag-and-drop hochgeladen werden. VPSPanel prüft das Archiv, erkennt statische Sites, Node.js, Next.js und FastAPI sowie benötigte Umgebungsvariablen und verwendet anschließend denselben Build-, Datenbank-, HTTPS- und Rollback-Ablauf wie bei GitHub.
+
+ZIP-Dateien sind auf 100 MB komprimiert, 250 MB entpackt und 5.000 Einträge begrenzt. Unsichere Pfade und symbolische Links werden abgelehnt. Die geprüfte Quelle wird projektbezogen gespeichert, damit manuelle Redeployments und Rollbacks ohne erneuten Upload funktionieren. Automatische Push-Deployments stehen naturgemäß nur für verbundene Git-Repositories zur Verfügung.
 ## Optionale GitHub-Verbindung
 
 Öffentliche GitHub-Repositories lassen sich ohne OAuth direkt über ihre URL deployen. Eine GitHub OAuth App ist nur für private Repositories, die komfortable Repository-Auswahl und automatische Push-Webhooks erforderlich.
@@ -53,7 +58,7 @@ sudo panelctl github status
 ## User-Flow
 
 1. Mit dem beim Installieren angezeigten lokalen Admin-Passwort anmelden.
-2. Die URL eines öffentlichen GitHub-Repositories einfügen, zum Beispiel `https://github.com/name/projekt`.
+2. Die URL eines öffentlichen GitHub-Repositories einfügen oder ein lokales Projekt als ZIP hochladen.
 3. VPSPanel erkennt statische Sites, Node.js, Next.js und FastAPI sowie fehlende Umgebungsvariablen.
 4. Domain eintragen und optional eine eigene PostgreSQL-Datenbank aktivieren.
 5. Deployment starten; Download, Build, Container, Healthcheck, Caddy-Route und HTTPS laufen automatisch.
