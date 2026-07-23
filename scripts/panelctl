@@ -11,18 +11,22 @@ set +a
 
 compose() { docker compose "$@"; }
 require_root() { [[ $EUID -eq 0 ]] || { echo "Run this command with sudo." >&2; exit 1; }; }
+project_version() { sed -n 's/^[[:space:]]*"version": "\([^"]*\)",/\1/p' apps/panel/package.json | head -n1; }
 
 usage() {
   cat <<'EOF'
 Usage: panelctl <command>
 
   status              Show service health
-  logs [service]      Follow logs (panel, caddy, or database)
+  logs [service]      Follow logs (panel, agent, caddy, or database)
   restart             Restart all services
   update              Pull the current branch and rebuild safely
   backup              Back up the panel database and configuration
   doctor              Check Docker, services, ports, disk, and HTTP health
   domain <hostname>   Configure the panel domain and automatic HTTPS
+  language <de|en>   Set the installation-wide dashboard language
+  github setup        Configure GitHub OAuth securely
+  github status       Show whether GitHub OAuth is configured
   uninstall [--yes]   Remove containers and the installation
   version             Show the installed version
 EOF
@@ -53,16 +57,36 @@ case "${1:-}" in
       echo "This installation has no Git metadata; reinstall from the public repository to enable updates." >&2
       exit 1
     fi
+    version="$(project_version)"
+    if grep -q '^VPSPANEL_VERSION=' .env; then
+      sed -i "s/^VPSPANEL_VERSION=.*/VPSPANEL_VERSION=$version/" .env
+    else
+      printf 'VPSPANEL_VERSION=%s\n' "$version" >> .env
+    fi
+    chmod 0600 .env
     compose up -d --build --remove-orphans
     compose exec -T panel node healthcheck.js
     ;;
   backup)
     require_root
     stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+    umask 077
     directory="$VPSPANEL_HOME/backups/$stamp"
     install -d -m 0700 "$directory"
     cp .env "$directory/env"
     compose exec -T database pg_dump -U "${POSTGRES_USER:-vpspanel}" "${POSTGRES_DB:-vpspanel}" > "$directory/database.sql"
+    docker ps --format '{{.Names}} {{.Image}} {{.Status}}' > "$directory/running-containers.txt"
+    while IFS= read -r database_container; do
+      [[ -n "$database_container" ]] || continue
+      project_id="${database_container#vpspanel-db-}"
+      docker exec "$database_container" pg_dump -U app app > "$directory/project-$project_id.sql"
+      echo "Project database backed up: $project_id"
+    done < <(docker ps --format '{{.Names}}' | grep '^vpspanel-db-' || true)
+    docker cp vpspanel-agent-1:/caddy/caddy-projects.json "$directory/caddy-projects.json" >/dev/null 2>&1 || true
+    (
+      cd "$directory"
+      sha256sum env database.sql project-*.sql caddy-projects.json 2>/dev/null > SHA256SUMS || true
+    )
     echo "Backup created: $directory"
     ;;
   doctor)
@@ -78,11 +102,51 @@ case "${1:-}" in
     if (( available_kb >= 2097152 )); then printf '✓ At least 2 GB disk space available\n'; else printf '✗ Less than 2 GB disk space available\n'; failures=$((failures + 1)); fi
     exit "$failures"
     ;;
+  github)
+    require_root
+    case "${2:-status}" in
+      setup)
+        read -r -p "GitHub OAuth Client ID: " client_id
+        read -r -s -p "GitHub OAuth Client Secret: " client_secret
+        echo
+        [[ "$client_id" =~ ^[A-Za-z0-9_]{10,}$ ]] || { echo "Invalid GitHub Client ID." >&2; exit 1; }
+        [[ "$client_secret" =~ ^[A-Fa-f0-9]{20,}$ ]] || { echo "Invalid GitHub Client Secret." >&2; exit 1; }
+        sed -i "s|^GITHUB_CLIENT_ID=.*|GITHUB_CLIENT_ID=$client_id|; s|^GITHUB_CLIENT_SECRET=.*|GITHUB_CLIENT_SECRET=$client_secret|" .env
+        chmod 0600 .env
+        compose up -d --force-recreate panel
+        echo "GitHub OAuth configured."
+        echo "Callback URL: ${PANEL_PUBLIC_URL}/api/auth/github/callback"
+        ;;
+      status)
+        if [[ -n "${GITHUB_CLIENT_ID:-}" && -n "${GITHUB_CLIENT_SECRET:-}" ]]; then
+          echo "GitHub OAuth is configured."
+        else
+          echo "GitHub OAuth is not configured."
+          echo "Run: sudo panelctl github setup"
+        fi
+        ;;
+      *) echo "Usage: panelctl github <setup|status>" >&2; exit 1 ;;
+    esac
+    ;;
+  language)
+    require_root
+    language="${2:-}"
+    [[ "$language" == "de" || "$language" == "en" ]] || { echo "Usage: panelctl language <de|en>" >&2; exit 1; }
+    if grep -q '^PANEL_LANGUAGE=' .env; then
+      sed -i "s/^PANEL_LANGUAGE=.*/PANEL_LANGUAGE=$language/" .env
+    else
+      printf 'PANEL_LANGUAGE=%s\n' "$language" >> .env
+    fi
+    chmod 0600 .env
+    compose up -d --force-recreate panel
+    if [[ "$language" == "de" ]]; then echo "Standardsprache auf Deutsch gesetzt."; else echo "Default language set to English."; fi
+    ;;
   domain)
     require_root
     domain="${2:-}"
     [[ "$domain" =~ ^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$ ]] || { echo "Usage: panelctl domain panel.example.com" >&2; exit 1; }
     sed -i "s|^PANEL_SITE_ADDRESS=.*|PANEL_SITE_ADDRESS=$domain|; s|^PANEL_PUBLIC_URL=.*|PANEL_PUBLIC_URL=https://$domain|" .env
+    chmod 0600 .env
     compose up -d --force-recreate caddy panel
     echo "Domain configured: https://$domain"
     echo "Make sure its A/AAAA record points to this server."
@@ -99,7 +163,7 @@ case "${1:-}" in
     echo "The remaining files can be reviewed in: $VPSPANEL_HOME"
     ;;
   version)
-    grep '^VPSPANEL_VERSION=' .env | cut -d= -f2-
+    project_version
     ;;
   -h|--help|help|"") usage ;;
   *) echo "Unknown command: $1" >&2; usage >&2; exit 1 ;;
