@@ -16,6 +16,38 @@ ok() { printf '\033[1;32m✓\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31m✗\033[0m %s\n' "$*" >&2; exit 1; }
 say() { if [[ "$PANEL_LANG" == "en" ]]; then printf '%s' "$2"; else printf '%s' "$1"; fi; }
 
+configure_firewall() {
+  local ports
+  if [[ -n "$PANEL_DOMAIN" ]]; then
+    ports=(80 443)
+  else
+    ports=(8080)
+  fi
+
+  if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then
+    log "$(say "Firewall-Ports werden mit UFW freigegeben" "Opening firewall ports with UFW")"
+    local port
+    for port in "${ports[@]}"; do
+      ufw allow "${port}/tcp" comment 'VPSPanel' >/dev/null
+    done
+    ok "$(say "Firewall ist für VPSPanel bereit" "Firewall is ready for VPSPanel")"
+    return
+  fi
+
+  if command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewalld; then
+    log "$(say "Firewall-Ports werden mit firewalld freigegeben" "Opening firewall ports with firewalld")"
+    local port
+    for port in "${ports[@]}"; do
+      firewall-cmd --permanent --add-port="${port}/tcp" >/dev/null
+    done
+    firewall-cmd --reload >/dev/null
+    ok "$(say "Firewall ist für VPSPanel bereit" "Firewall is ready for VPSPanel")"
+    return
+  fi
+
+  log "$(say "Keine aktive UFW-/firewalld-Firewall erkannt; lokale Firewall-Regeln wurden nicht geändert" "No active UFW/firewalld firewall detected; local firewall rules were not changed")"
+}
+
 usage() {
   if [[ "$PANEL_LANG" == "en" ]]; then
     cat <<'EOF'
@@ -93,6 +125,7 @@ systemctl enable --now docker >/dev/null
 docker info >/dev/null 2>&1 || die "$(say "Docker Engine wurde installiert, läuft aber nicht." "Docker Engine was installed but is not running.")"
 docker compose version >/dev/null 2>&1 || die "$(say "Docker Compose v2 ist nicht verfügbar." "Docker Compose v2 is not available.")"
 ok "$(say "Docker und Docker Compose sind bereit" "Docker and Docker Compose are ready")"
+configure_firewall
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -f "$SCRIPT_DIR/docker-compose.yml" && -d "$SCRIPT_DIR/apps" ]]; then
