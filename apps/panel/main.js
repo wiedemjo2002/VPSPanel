@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import { createHmac, randomBytes } from "node:crypto";
+import QRCode from "qrcode";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -189,7 +190,7 @@ async function api(request, response, url) {
     await pool.query("SELECT 1");
     return json(response, 200, { status: "ok", service: "vpspanel", startedAt });
   }
-  if (url.pathname === "/api/meta") return json(response, 200, { publicUrl: panelPublicUrl, localLoginConfigured: adminPassword.length >= 16, githubConfigured: Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET), language: panelLanguage, version: "0.6.0" });
+  if (url.pathname === "/api/meta") return json(response, 200, { publicUrl: panelPublicUrl, localLoginConfigured: adminPassword.length >= 16, githubConfigured: Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET), language: panelLanguage, version: "0.7.0" });
   if (url.pathname === "/api/webhooks/github" && request.method === "POST") return githubWebhook(request, response);
   if (url.pathname === "/api/e2e/session" && request.method === "GET" && process.env.E2E_MODE === "true" && process.env.E2E_SESSION_TOKEN) {
     if (!safeEqual(url.searchParams.get("token"), process.env.E2E_SESSION_TOKEN)) return json(response, 404, { error: "Not found" });
@@ -256,6 +257,15 @@ async function api(request, response, url) {
     return json(response, 200, await agentUpload(request));
   }
 
+  if (url.pathname === "/api/preview-qr" && request.method === "GET") {
+    const previewUrl = String(url.searchParams.get("url") || "");
+    let parsed;
+    try { parsed = new URL(previewUrl); } catch { return json(response, 400, { error: "Ungültige Preview-URL." }); }
+    if (parsed.protocol !== "https:" || parsed.pathname !== "/" || parsed.search || parsed.hash || parsed.port || parsed.username || parsed.password || !validDomain(parsed.hostname)) return json(response, 400, { error: "Ungültige Preview-URL." });
+    const svg = await QRCode.toString(previewUrl, { type: "svg", margin: 1, width: 180, color: { dark: "#07120e", light: "#e8fff4" } });
+    response.writeHead(200, { ...securityHeaders, "Content-Type": "image/svg+xml", "Cache-Control": "no-store" });
+    return response.end(svg);
+  }
   if (url.pathname === "/api/settings" && request.method === "GET") {
     return json(response, 200, { publicUrl: panelPublicUrl, httpsEnabled: panelPublicUrl.startsWith("https://") });
   }
@@ -350,7 +360,7 @@ async function api(request, response, url) {
         await pool.query("UPDATE projects SET config=$1 WHERE id=$2", [config, projectId]);
       }
     }
-    return json(response, 202, { projectId, deploymentId, webhookWarning });
+    return json(response, 202, { projectId, deploymentId, previewUrl: `https://${input.domain.toLowerCase()}`, webhookWarning });
   }
 
   const match = url.pathname.match(/^\/api\/projects\/([a-f0-9]{16})(?:\/(status|logs|deploy|rollback))?$/);
@@ -361,7 +371,7 @@ async function api(request, response, url) {
     const action = match[2];
     if ((!action || action === "status") && request.method === "GET") {
       const job = await syncDeployment(project);
-      return json(response, 200, { id: project.id, name: project.name, domain: project.domain, framework: project.framework, status: job?.status === "healthy" ? "online" : job?.status || project.status, deploymentId: project.current_deployment, steps: job?.steps || [] });
+      return json(response, 200, { id: project.id, name: project.name, domain: project.domain, framework: project.framework, status: job?.status === "healthy" ? "online" : job?.status || project.status, deploymentId: project.current_deployment, previewUrl: `https://${project.domain}`, steps: job?.steps || [] });
     }
     if (action === "logs" && request.method === "GET") return json(response, 200, await agent(`/actions/logs?projectId=${project.id}`));
     if (action === "deploy" && request.method === "POST") {

@@ -41,6 +41,7 @@ const messages = {
     previousKeepsRunning: "Die vorherige Version läuft weiterhin, falls bereits eine vorhanden war.",
     openLogsHint: "Öffne die Logs für die genaue Ursache.", domainRequired: "Bitte gib die Domain deiner App ein.",
     deploymentRunning: "Deployment läuft", deploymentPreparing: "Deployment wird vorbereitet",
+    creatorMode: "Creator-Modus", previewUrl: "Deine Preview-URL", launchVerified: "LAUNCH VERIFIZIERT", previewPreparing: "Preview wird vorbereitet", deploymentElapsed: "Läuft seit", launchComplete: "Deployment erfolgreich", qrCodeAlt: "QR-Code zur App",
     noLogs: "Noch keine Logs vorhanden.", rollbackConfirm: "Wirklich die vorherige funktionierende Version starten?",
     githubNotConfigured: "GitHub OAuth ist noch nicht konfiguriert. Nutze panelctl github setup.",
     signedInAs: "Angemeldet als", account: "ACCOUNT", securityAndHttps: "Sicherheit & HTTPS", currentAddress: "Aktuelle Adresse",
@@ -82,6 +83,7 @@ const messages = {
     previousKeepsRunning: "The previous version remains online if one already exists.",
     openLogsHint: "Open the logs to see the exact cause.", domainRequired: "Please enter your app domain.",
     deploymentRunning: "Deployment running", deploymentPreparing: "Preparing deployment",
+    creatorMode: "Creator mode", previewUrl: "Your preview URL", launchVerified: "LAUNCH VERIFIED", previewPreparing: "Preview is being prepared", deploymentElapsed: "Running for", launchComplete: "Deployment successful", qrCodeAlt: "QR code for the app",
     noLogs: "No logs available yet.", rollbackConfirm: "Start the previous working version?",
     githubNotConfigured: "GitHub OAuth is not configured yet. Run panelctl github setup.",
     signedInAs: "Signed in as", account: "ACCOUNT", securityAndHttps: "Security & HTTPS", currentAddress: "Current address",
@@ -100,6 +102,10 @@ let inspection = null;
 let selectedRepository = null;
 let selectedUploadId = null;
 let pollingTimer = null;
+let deploymentTimer = null;
+let deploymentStartedAt = 0;
+let activePreviewUrl = "";
+let creatorMode = true;
 let githubConnected = false;
 let githubConfigured = false;
 
@@ -170,6 +176,66 @@ function statusLabel(status) {
   return ({ online: t("statusOnline"), healthy: t("statusOnline"), deploying: t("statusDeploying"), queued: t("statusQueued"), failed: t("statusFailed") })[status] || status;
 }
 
+function previewUrlFor(domain) {
+  const normalized = String(domain || "").trim().toLowerCase();
+  return /^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i.test(normalized) ? `https://${normalized}` : "";
+}
+
+function updatePreviewUrl(domain) {
+  activePreviewUrl = previewUrlFor(domain);
+  const configurePreview = $("#previewUrlCard");
+  const progressPreview = $("#deploymentPreview");
+  configurePreview.classList.toggle("hidden", !activePreviewUrl);
+  progressPreview.classList.toggle("hidden", !activePreviewUrl);
+  if (!activePreviewUrl) return;
+  $("#previewUrl").textContent = activePreviewUrl;
+  $("#previewUrl").href = activePreviewUrl;
+  progressPreview.textContent = activePreviewUrl;
+  progressPreview.href = activePreviewUrl;
+}
+
+function updateDeploymentTimer() {
+  if (!deploymentStartedAt) return;
+  const seconds = Math.max(0, Math.floor((Date.now() - deploymentStartedAt) / 1000));
+  $("#deploymentTimer").textContent = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function stopDeploymentTimer() {
+  if (deploymentTimer) window.clearInterval(deploymentTimer);
+  deploymentTimer = null;
+}
+
+function beginDeploymentPresentation(domain) {
+  stopDeploymentTimer();
+  deploymentStartedAt = Date.now();
+  updateDeploymentTimer();
+  deploymentTimer = window.setInterval(updateDeploymentTimer, 1000);
+  updatePreviewUrl(domain);
+  $("#successCard").classList.add("hidden");
+  $("#openAppButton").classList.add("hidden");
+}
+
+function showDeploymentSuccess(previewUrl) {
+  stopDeploymentTimer();
+  updatePreviewUrl(previewUrl.replace(/^https:\/\//, ""));
+  $("#successUrl").textContent = activePreviewUrl;
+  $("#successTime").textContent = `${t("launchComplete")} · ${t("deploymentElapsed")} ${$("#deploymentTimer").textContent}`;
+  const qr = $("#successQr");
+  qr.alt = t("qrCodeAlt");
+  qr.src = "/api/preview-qr?url=" + encodeURIComponent(activePreviewUrl);
+  $("#successCard").classList.remove("hidden");
+  document.body.classList.add("launch-success");
+  window.setTimeout(() => document.body.classList.remove("launch-success"), 1800);
+}
+
+function setCreatorMode(enabled, persist = true) {
+  creatorMode = Boolean(enabled);
+  document.body.classList.toggle("creator-mode", creatorMode);
+  $("#creatorModeToggle").checked = creatorMode;
+  if (persist) {
+    try { window.localStorage.setItem("vpspanel_creator_mode", creatorMode ? "1" : "0"); } catch {}
+  }
+}
 function projectCard(project) {
   const card = element("article", "project-card");
   const top = element("div", "project-top");
@@ -237,6 +303,10 @@ function resetDialog() {
   $("#autoDeployInput").checked = githubConnected;
   $("#autoDeployRow").classList.toggle("hidden", !githubConnected);
   $("#environmentFields").replaceChildren();
+  stopDeploymentTimer();
+  deploymentStartedAt = 0;
+  updatePreviewUrl("");
+  $("#successCard").classList.add("hidden");
 }
 
 async function openDeploy() {
@@ -340,10 +410,11 @@ async function pollDeployment(projectId) {
     renderSteps(status.steps || []);
     if (status.status === "online" || status.status === "healthy") {
       $("#progressTitle").textContent = t("appOnline");
-      $("#progressSubtitle").textContent = status.domain;
+      $("#progressSubtitle").textContent = status.previewUrl || `https://${status.domain}`;
       const open = $("#openAppButton");
-      open.href = "https://" + status.domain;
+      open.href = status.previewUrl || "https://" + status.domain;
       open.classList.remove("hidden");
+      showDeploymentSuccess(status.previewUrl || "https://" + status.domain);
       await loadProjects();
       return;
     }
@@ -376,6 +447,7 @@ async function deployProject() {
     $("#configureStep").classList.add("hidden");
     $("#progressStep").classList.remove("hidden");
     $("#dialogTitle").textContent = t("deploymentRunning");
+    beginDeploymentPresentation(result.previewUrl || domain);
     renderSteps([{ name: t("deploymentPreparing"), status: "running" }]);
     await pollDeployment(result.projectId);
   } catch (error) { showError(error.message); }
@@ -398,7 +470,7 @@ async function redeployProject(projectId) {
   $("#dialogTitle").textContent = t("deploymentRunning");
   $("#progressTitle").textContent = t("deploymentRunning");
   $("#progressSubtitle").textContent = t("firstBuildHint");
-  $("#openAppButton").classList.add("hidden");
+  beginDeploymentPresentation(currentProjects.find((project) => project.id === projectId)?.domain || "");
   renderSteps([{ name: t("deploymentPreparing"), status: "running" }]);
   try {
     await api("/api/projects/" + projectId + "/deploy", { method: "POST", body: "{}" });
@@ -468,6 +540,9 @@ async function initialize() {
     githubConnected = Boolean(me.githubConnected);
     landing.classList.add("hidden");
     dashboard.classList.remove("hidden");
+    const savedCreatorMode = window.localStorage.getItem("vpspanel_creator_mode");
+    setCreatorMode(savedCreatorMode !== "0", false);
+    $("#creatorModeControl").classList.remove("hidden");
     const account = $("#accountButton");
     account.classList.remove("hidden");
     account.title = t("signedInAs") + " " + me.login;
@@ -500,6 +575,8 @@ $("#newProjectButton").addEventListener("click", openDeploy);
 $("#emptyDeployButton").addEventListener("click", openDeploy);
 $("#inspectButton").addEventListener("click", inspectSelected);
 $("#deploySubmitButton").addEventListener("click", deployProject);
+$("#domainInput").addEventListener("input", () => updatePreviewUrl($("#domainInput").value));
+$("#creatorModeToggle").addEventListener("change", (event) => setCreatorMode(event.target.checked));
 $("#repositorySelect").addEventListener("change", () => {
   const repo = repositories[Number($("#repositorySelect").value)];
   if (repo) { $("#branchInput").value = repo.defaultBranch; $("#repositoryUrlInput").value = ""; $("#projectZipInput").value = ""; $("#zipFileLabel").textContent = t("zipHint"); }

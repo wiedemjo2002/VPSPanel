@@ -36,6 +36,9 @@ Das Dashboard ist direkt nach der Installation durch ein zufällig erzeugtes Adm
 
 Für HTTPS im Dashboard oben rechts das Zahnrad öffnen, eine Domain eintragen und **HTTPS aktivieren** wählen. Zuvor muss der A-Record (und ein vorhandener AAAA-Record) der Domain auf den VPS zeigen. VPSPanel schreibt die Caddy-Konfiguration; Caddy beschafft und erneuert das öffentliche TLS-Zertifikat automatisch. Die lokale Server-Firewall wird vom Installer für 80, 443 und 8080 vorbereitet. Falls der VPS-Anbieter zusätzlich eine Netzwerk-Firewall besitzt, müssen dort 80 und 443 ebenfalls freigegeben sein.
 
+## Creator-Modus und Launch-Ansicht
+
+Nach dem Start eines Deployments zeigt das Panel automatisch die künftige HTTPS-Adresse, einen laufenden Timer und die einzelnen Build-Schritte. Nach dem erfolgreichen Healthcheck erscheint eine cyberartige Launch-Karte mit der Live-URL und einem lokal auf dem VPS erzeugten QR-Code. Der Creator-Modus kann oben im Panel ein- oder ausgeschaltet werden und merkt sich die Auswahl im Browser.
 ## Projekt als ZIP hochladen
 
 Git ist für lokale Projekte nicht erforderlich. Im Dialog **App deployen** kann alternativ eine ZIP-Datei ausgewählt oder per Drag-and-drop hochgeladen werden. VPSPanel prüft das Archiv, erkennt statische Sites, Node.js, Next.js und FastAPI sowie benötigte Umgebungsvariablen und verwendet anschließend denselben Build-, Datenbank-, HTTPS- und Rollback-Ablauf wie bei GitHub.

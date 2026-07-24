@@ -19,6 +19,8 @@ test("creates and exposes a local admin password", () => {
 
 test("disables push webhooks when no GitHub token exists", () => {
   assert.match(panel, /const autoDeploy = !uploaded && Boolean\(githubToken\)/);
+  assert.match(panel, /QRCode\.toString/);
+  assert.match(panel, /\/api\/preview-qr/);
 });
 test("persists the HTTPS panel address", () => {
   assert.match(database, /CREATE TABLE IF NOT EXISTS settings/);

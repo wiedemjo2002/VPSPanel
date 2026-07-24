@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#080c18" />
     <title>VPSPanel · Johannes Wiedemann</title>
-    <link rel="stylesheet" href="/dashboard.css?v=0.6.0" />
+    <link rel="stylesheet" href="/dashboard.css?v=0.7.0" />
   </head>
   <body>
     <div class="noise"></div>
@@ -20,6 +20,7 @@
           <button type="button" data-language="en">EN</button>
         </div>
         <span class="server-badge"><i></i><span data-i18n="serverReady">Server bereit</span></span>
+        <label class="creator-switch hidden" id="creatorModeControl"><input id="creatorModeToggle" type="checkbox" /><span></span><b data-i18n="creatorMode">Creator-Modus</b></label>
         <button class="avatar-button hidden" id="accountButton" aria-label="Account"></button>
       </div>
     </header>
@@ -72,6 +73,7 @@
         <section class="hidden" id="configureStep">
           <div class="detected" id="detectedSummary"></div>
           <label class="field"><span data-i18n="domain">Domain</span><input id="domainInput" placeholder="app.meinedomain.de" autocomplete="off" /></label>
+          <div class="preview-url hidden" id="previewUrlCard"><span data-i18n="previewUrl">Deine Preview-URL</span><a id="previewUrl" target="_blank" rel="noreferrer"></a></div>
           <label class="check-row"><input type="checkbox" id="databaseInput" /><span><b data-i18n="createPostgres">PostgreSQL automatisch erstellen</b><small data-i18n="databaseHint">Sicheres Passwort und DATABASE_URL inklusive</small></span></label>
           <label class="check-row" id="autoDeployRow"><input type="checkbox" id="autoDeployInput" checked /><span><b data-i18n="deployEveryPush">Bei jedem Push neu deployen</b><small data-i18n="webhookHint">VPSPanel richtet den GitHub-Webhook automatisch ein</small></span></label>
           <div id="environmentFields"></div>
@@ -83,7 +85,12 @@
           <div class="progress-orb"><i></i></div>
           <h2 id="progressTitle" data-i18n="preparingApp">Deine App wird vorbereitet</h2>
           <p id="progressSubtitle" data-i18n="firstBuildHint">Das dauert beim ersten Build normalerweise ein paar Minuten.</p>
+          <div class="deployment-live"><span class="deployment-timer" id="deploymentTimer">00:00</span><a class="deployment-preview hidden" id="deploymentPreview" target="_blank" rel="noreferrer"></a></div>
           <div class="steps" id="deploymentSteps"></div>
+          <section class="success-card hidden" id="successCard">
+            <div><p class="eyebrow" data-i18n="launchVerified">LAUNCH VERIFIED</p><h3 data-i18n="appOnline">Deine App ist online</h3><p id="successUrl"></p><p class="success-time" id="successTime"></p></div>
+            <img id="successQr" width="148" height="148" alt="QR-Code zur App" />
+          </section>
           <a class="primary full hidden" id="openAppButton" target="_blank" rel="noreferrer"><span data-i18n="openApp">App öffnen</span><span>↗</span></a>
         </section>
         <p class="form-error hidden" id="formError"></p>
@@ -119,6 +126,6 @@
       <span class="footer-signature"><strong>VPSPanel</strong><span data-i18n="craftedBy">Entwickelt von Johannes Wiedemann</span></span>
       <span id="version">VPSPanel</span>
     </footer>
-    <script src="/dashboard.js?v=0.6.0" type="module"></script>
+    <script src="/dashboard.js?v=0.7.0" type="module"></script>
   </body>
 </html>
